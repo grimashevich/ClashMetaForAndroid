@@ -185,7 +185,7 @@ object Clash {
     }
 
     fun queryOverride(slot: OverrideSlot): ConfigurationOverride {
-        return try {
+        val override = try {
             ConfigurationOverrideJson.decodeFromString(
                 ConfigurationOverride.serializer(),
                 Bridge.nativeReadOverride(slot.ordinal)
@@ -193,16 +193,41 @@ object Clash {
         } catch (e: Exception) {
             ConfigurationOverride()
         }
+        return enforceDetectionHardening(override)
     }
 
     fun patchOverride(slot: OverrideSlot, configuration: ConfigurationOverride) {
+        val hardened = enforceDetectionHardening(configuration)
         Bridge.nativeWriteOverride(
             slot.ordinal,
             ConfigurationOverrideJson.encodeToString(
                 ConfigurationOverride.serializer(),
-                configuration
+                hardened
             )
         )
+    }
+
+    /**
+     * Close every clash-core listener port that can be picked up by a
+     * localhost port scanner on the same device. Applied both on read and
+     * on write so a user-supplied subscription profile cannot re-open the
+     * ports by specifying them in its YAML.
+     *
+     * RKNHardering and YourVPNDead both scan 127.0.0.1 and fingerprint
+     * Clash by the default ports (mixed: 7890, API: 9090, socks: 7891,
+     * http: 7892, redir, tproxy). Setting them all to zero skips the
+     * `net.Listen` call in clash-core. Traffic still flows through the
+     * TUN interface, which is the only path we rely on.
+     */
+    private fun enforceDetectionHardening(o: ConfigurationOverride): ConfigurationOverride {
+        o.httpPort = 0
+        o.socksPort = 0
+        o.redirectPort = 0
+        o.tproxyPort = 0
+        o.mixedPort = 0
+        o.externalController = ""
+        o.externalControllerTLS = ""
+        return o
     }
 
     fun clearOverride(slot: OverrideSlot) {

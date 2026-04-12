@@ -47,7 +47,12 @@ subprojects {
         defaultConfig {
             if (isApp) {
                 val customApplicationId = queryConfigProperty("custom.application.id") as? String?
-                applicationId = customApplicationId.takeIf { it?.isNotBlank() == true } ?: "com.github.metacubex.clash"
+                // Default applicationId changed from upstream's
+                // `com.github.metacubex.clash` so this fork does not
+                // match the hardcoded package list in YourVPNDead
+                // (see detectors/YourVPNDead `InstalledPackagesDetector`)
+                // or RKNHardering's VpnAppCatalog.
+                applicationId = customApplicationId.takeIf { it?.isNotBlank() == true } ?: "com.wx3y.vpn.client"
             }
 
             project.name.let { name ->

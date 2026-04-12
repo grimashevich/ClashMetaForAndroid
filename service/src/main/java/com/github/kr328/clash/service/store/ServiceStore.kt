@@ -22,7 +22,11 @@ class ServiceStore(context: Context) {
 
     var bypassPrivateNetwork: Boolean by store.boolean(
         key = "bypass_private_network",
-        defaultValue = true
+        // Default OFF: a full-tunnel route (0.0.0.0/0) looks like a normal
+        // VPN. Leaving ON creates "dedicated routes to TUN" (1.0.0.0/8,
+        // 2.0.0.0/7, 4.0.0.0/6) which RKNHardering flags as split
+        // tunneling (see reports/2026-04-12-10-49-full-tunnel/REPORT.md).
+        defaultValue = false
     )
 
     var accessControlMode: AccessControlMode by store.enum(
@@ -43,7 +47,10 @@ class ServiceStore(context: Context) {
 
     var systemProxy by store.boolean(
         key = "system_proxy",
-        defaultValue = true
+        // Default OFF: attaching an HTTP proxy to the VpnService surfaces
+        // via System.getProperty("http.proxyHost") and is immediately
+        // flagged by both RKNHardering and YourVPNDead as a VPN marker.
+        defaultValue = false
     )
 
     var allowBypass by store.boolean(
