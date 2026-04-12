@@ -20,8 +20,8 @@ import com.github.kr328.clash.service.util.sendClashStopped
 import kotlinx.coroutines.*
 import kotlinx.coroutines.selects.select
 
-class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.Default) {
-    private val self: TunService
+class NetworkBridgeService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.Default) {
+    private val self: NetworkBridgeService
         get() = this
 
     private var reason: String? = null
@@ -109,7 +109,7 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
 
         cancelAndJoinBlocking()
 
-        Log.i("TunService destroyed: ${reason ?: "successfully"}")
+        Log.i("NetworkBridgeService destroyed: ${reason ?: "successfully"}")
 
         super.onDestroy()
     }
@@ -174,8 +174,9 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
             // Mtu
             setMtu(TUN_MTU)
 
-            // Session Name
-            setSession("Clash")
+            // Session Name — shown in Android's VPN status UI.
+            // Keep neutral to avoid leaking the clash-core origin.
+            setSession("Network Bridge")
 
             // Virtual Dns Server
             addDnsServer(TUN_DNS)

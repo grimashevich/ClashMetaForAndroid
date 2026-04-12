@@ -16,7 +16,7 @@ class PreferenceProvider : PreferenceProvider() {
 
         fun createSharedPreferencesFromContext(context: Context): SharedPreferences {
             return when (context) {
-                is BaseService, is TunService ->
+                is BaseService, is NetworkBridgeService ->
                     context.getSharedPreferences(
                         FILE_NAME,
                         Context.MODE_PRIVATE

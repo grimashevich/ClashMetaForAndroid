@@ -21,7 +21,7 @@
                 android:value="explanation_for_special_use"/>
         </service>
         <service
-            android:name=".TunService"
+            android:name=".NetworkBridgeService"
             android:exported="false"
             android:label="@string/clash_meta_for_android"
             android:permission="android.permission.BIND_VPN_SERVICE"
