@@ -22,11 +22,16 @@ class ServiceStore(context: Context) {
 
     var bypassPrivateNetwork: Boolean by store.boolean(
         key = "bypass_private_network",
-        // Default OFF: a full-tunnel route (0.0.0.0/0) looks like a normal
-        // VPN. Leaving ON creates "dedicated routes to TUN" (1.0.0.0/8,
-        // 2.0.0.0/7, 4.0.0.0/6) which RKNHardering flags as split
-        // tunneling (see reports/2026-04-12-10-49-full-tunnel/REPORT.md).
-        defaultValue = false
+        // Keep ON (upstream default). Initially tried OFF to present a
+        // single 0.0.0.0/0 default route (less detector-suspicious),
+        // but Android VpnService then captures loopback too — breaking
+        // adb-forwarded local ports (Maestro driver on 127.0.0.1:7001,
+        // app dev servers, anything bound to localhost). The detector
+        // flags "dedicated routes to tun0" and "routing indicates split
+        // tunneling" are inherent to Android's per-UID VPN routing and
+        // cannot be closed without root/magisk. Accept the flag; keep
+        // the device functional.
+        defaultValue = true
     )
 
     var accessControlMode: AccessControlMode by store.enum(
