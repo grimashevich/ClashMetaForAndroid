@@ -8,7 +8,7 @@ import com.github.kr328.clash.common.constants.Intents
 import com.github.kr328.clash.common.util.intent
 import com.github.kr328.clash.design.store.UiStore
 import com.github.kr328.clash.service.ClashService
-import com.github.kr328.clash.service.TunService
+import com.github.kr328.clash.service.NetworkBridgeService
 import com.github.kr328.clash.service.util.sendBroadcastSelf
 
 fun Context.startClashService(): Intent? {
@@ -19,7 +19,7 @@ fun Context.startClashService(): Intent? {
         if (vpnRequest != null)
             return vpnRequest
 
-        startForegroundServiceCompat(TunService::class.intent)
+        startForegroundServiceCompat(NetworkBridgeService::class.intent)
     } else {
         startForegroundServiceCompat(ClashService::class.intent)
     }

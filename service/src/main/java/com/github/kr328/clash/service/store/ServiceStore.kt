@@ -22,6 +22,15 @@ class ServiceStore(context: Context) {
 
     var bypassPrivateNetwork: Boolean by store.boolean(
         key = "bypass_private_network",
+        // Keep ON (upstream default). Initially tried OFF to present a
+        // single 0.0.0.0/0 default route (less detector-suspicious),
+        // but Android VpnService then captures loopback too — breaking
+        // adb-forwarded local ports (Maestro driver on 127.0.0.1:7001,
+        // app dev servers, anything bound to localhost). The detector
+        // flags "dedicated routes to tun0" and "routing indicates split
+        // tunneling" are inherent to Android's per-UID VPN routing and
+        // cannot be closed without root/magisk. Accept the flag; keep
+        // the device functional.
         defaultValue = true
     )
 
@@ -43,7 +52,10 @@ class ServiceStore(context: Context) {
 
     var systemProxy by store.boolean(
         key = "system_proxy",
-        defaultValue = true
+        // Default OFF: attaching an HTTP proxy to the VpnService surfaces
+        // via System.getProperty("http.proxyHost") and is immediately
+        // flagged by both RKNHardering and YourVPNDead as a VPN marker.
+        defaultValue = false
     )
 
     var allowBypass by store.boolean(

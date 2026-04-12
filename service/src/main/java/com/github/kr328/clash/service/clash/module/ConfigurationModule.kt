@@ -55,6 +55,23 @@ class ConfigurationModule(service: Service) : Module<ConfigurationModule.LoadExc
                 val active = ImportedDao().queryByUUID(current)
                     ?: throw NullPointerException("No profile selected")
 
+                // Force-write the hardening override file BEFORE the
+                // profile is loaded into clash-core. Otherwise, on a
+                // fresh install where the UI has never saved an
+                // override, the override file on disk is empty and
+                // clash-core uses the profile's own ports (mixed: 7890,
+                // external-controller: 9090 — both visible on localhost
+                // and detected by RKNHardering/YourVPNDead).
+                //
+                // queryOverride() runs enforceDetectionHardening() on
+                // the current value, patchOverride() writes the hardened
+                // version. The round-trip has no effect on fields we
+                // don't touch.
+                Clash.patchOverride(
+                    Clash.OverrideSlot.Persist,
+                    Clash.queryOverride(Clash.OverrideSlot.Persist)
+                )
+
                 Clash.load(service.importedDir.resolve(active.uuid.toString())).await()
 
                 val remove = SelectionDao().querySelections(active.uuid)
