@@ -236,8 +236,18 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
         private const val TUN_GATEWAY6 = "fdfe:dcba:9876::1"
         private const val TUN_PORTAL = "172.19.0.2"
         private const val TUN_PORTAL6 = "fdfe:dcba:9876::2"
-        private const val TUN_DNS = TUN_PORTAL
-        private const val TUN_DNS6 = TUN_PORTAL6
+
+        // Detection-hardening: a DNS server inside an RFC-1918 subnet
+        // (the TUN portal 172.19.0.2) is a strong VPN signal — both
+        // YourVPNDead and RKNHardering check
+        // ConnectivityManager.getLinkProperties().getDnsServers() for
+        // private-subnet addresses. Advertise public resolvers instead.
+        // DNS hijacking (dns: NET_ANY in the clash-core TUN config
+        // below) still intercepts the query inside clash-core, so the
+        // actual upstream lookups can be whatever the subscription
+        // profile specifies — only the LinkProperties surface changes.
+        private const val TUN_DNS = "1.1.1.1"
+        private const val TUN_DNS6 = "2606:4700:4700::1111"
         private const val NET_ANY = "0.0.0.0"
         private const val NET_ANY6 = "::"
 
