@@ -192,9 +192,22 @@ func convertProxies(proxies []C.Proxy, uiSubtitlePattern *regexp2.Regexp) []*Pro
 		}
 		_, isGroup := p.Adapter().(outboundgroup.ProxyGroup)
 
+		// Annotate servers (not nested groups) with the Google-attributed
+		// country code from the geo-split classifier, e.g. "Финляндия [RU]".
+		// This makes the RU/non-RU bucketing visible in the proxy list. Only
+		// the display Title gets the suffix; Name (the selection identity used
+		// by PatchSelector/Set) stays byte-for-byte the server name. The code
+		// is empty until a geo-split group has driven a classification sweep.
+		title = strings.TrimSpace(title)
+		if !isGroup {
+			if code := outboundgroup.RegionCodeOf(name); code != "" {
+				title += " [" + code + "]"
+			}
+		}
+
 		result = append(result, &Proxy{
 			Name:     name,
-			Title:    strings.TrimSpace(title),
+			Title:    title,
 			Subtitle: strings.TrimSpace(subtitle),
 			Type:     p.Type().String(),
 			Delay:    int(p.LastDelayForTestUrl(testURL)),
@@ -233,9 +246,18 @@ func collectProviders(providers []provider.ProxyProvider, uiSubtitlePattern *reg
 			}
 			_, isGroup := px.Adapter().(outboundgroup.ProxyGroup)
 
+			// Same country-code annotation as convertProxies (kept in sync;
+			// this provider path is currently unused but mirrors the live one).
+			title = strings.TrimSpace(title)
+			if !isGroup {
+				if code := outboundgroup.RegionCodeOf(name); code != "" {
+					title += " [" + code + "]"
+				}
+			}
+
 			result = append(result, &Proxy{
 				Name:     name,
-				Title:    strings.TrimSpace(title),
+				Title:    title,
 				Subtitle: strings.TrimSpace(subtitle),
 				Type:     px.Type().String(),
 				Delay:    int(px.LastDelayForTestUrl(testURL)),
