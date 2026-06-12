@@ -72,6 +72,8 @@ class ConfigurationModule(service: Service) : Module<ConfigurationModule.LoadExc
                     Clash.queryOverride(Clash.OverrideSlot.Persist)
                 )
 
+                Clash.setAgeSecretKey(active.ageSecretKey?.takeIf { it.isNotBlank() })
+
                 Clash.load(service.importedDir.resolve(active.uuid.toString())).await()
 
                 val remove = SelectionDao().querySelections(active.uuid)
