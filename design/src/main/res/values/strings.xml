@@ -370,4 +370,7 @@
     <string name="shortcut_start_long">Start Clash service</string>
     <string name="shortcut_stop_short">Stop Clash</string>
     <string name="shortcut_stop_long">Stop Clash service</string>
+    <string name="server_priorities">Server priorities</string>
+    <string name="server_priority_input_hint">Lower number — higher priority. Empty — no priority.</string>
+    <string name="server_priorities_empty">No servers known yet. Import or update a profile first.</string>
 </resources>

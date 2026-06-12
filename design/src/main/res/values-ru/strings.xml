@@ -328,4 +328,7 @@
     <string name="override_destination">Override Destination</string>
     <string name="import_from_qr_no_permission">Доступ к камере ограничен. Разрешите его в настройках.</string>
     <string name="import_from_qr_exception">Произошла не обрабатываемая системная ошибка.</string>
+    <string name="server_priorities">Приоритеты серверов</string>
+    <string name="server_priority_input_hint">Меньше число — выше приоритет. Пусто — без приоритета.</string>
+    <string name="server_priorities_empty">Серверы ещё не известны. Сначала импортируйте или обновите профиль.</string>
 </resources>
