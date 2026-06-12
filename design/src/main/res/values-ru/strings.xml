@@ -331,4 +331,5 @@
     <string name="server_priorities">Приоритеты серверов</string>
     <string name="server_priority_input_hint">Меньше число — выше приоритет. Пусто — без приоритета.</string>
     <string name="server_priorities_empty">Серверы ещё не известны. Сначала импортируйте или обновите профиль.</string>
+    <string name="server_priorities_save_failed">Не удалось сохранить приоритеты. Проверьте память и повторите.</string>
 </resources>

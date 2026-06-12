@@ -31,7 +31,15 @@ class ServerPrioritiesActivity : BaseActivity<ServerPrioritiesDesign>() {
 
         while (isActive) {
             select<Unit> {
-                events.onReceive {
+                events.onReceive { event ->
+                    when (event) {
+                        // Mirror the other settings screens: a service
+                        // recreate or VPN start/stop may have re-written
+                        // known_servers.json, so reload the list.
+                        Event.ClashStart, Event.ClashStop, Event.ServiceRecreated ->
+                            recreate()
+                        else -> Unit
+                    }
                 }
                 design.requests.onReceive {
                     when (it) {
@@ -53,11 +61,12 @@ class ServerPrioritiesActivity : BaseActivity<ServerPrioritiesDesign>() {
                             val newPriority = input?.trim()?.toIntOrNull()
 
                             if (newPriority != entry.priority) {
+                                val previous = entry.priority
                                 entry.priority = newPriority
 
                                 design.notifyChanged(it.index)
 
-                                withContext(Dispatchers.IO) {
+                                val saved = withContext(Dispatchers.IO) {
                                     val priorities = design.entries
                                         .mapNotNull { e -> e.priority?.let { p -> e.name to p } }
                                         .toMap()
@@ -68,10 +77,22 @@ class ServerPrioritiesActivity : BaseActivity<ServerPrioritiesDesign>() {
                                     )
                                 }
 
-                                // rebuilds the ⚡ fallback group if the
-                                // service is currently running (same reload
-                                // path as override edits)
-                                sendOverrideChanged()
+                                if (saved) {
+                                    // rebuilds the ⚡ fallback group if the
+                                    // service is currently running (same reload
+                                    // path as override edits)
+                                    sendOverrideChanged()
+                                } else {
+                                    // persist failed (storage/permissions):
+                                    // revert the in-memory change so the UI
+                                    // matches what's actually on disk
+                                    entry.priority = previous
+                                    design.notifyChanged(it.index)
+                                    design.showToast(
+                                        R.string.server_priorities_save_failed,
+                                        ToastDuration.Long,
+                                    )
+                                }
                             }
                         }
                     }

@@ -61,9 +61,33 @@ func readPriorities() map[string]int {
 	return f.Priorities
 }
 
-// writeKnownServers dumps the server names of the profile being loaded
+// collectServerNames returns the plain-proxy names of a profile in
+// subscription order (groups and providers excluded).
+func collectServerNames(cfg *config.RawConfig) []string {
+	servers := make([]string, 0, len(cfg.Proxy))
+	for _, proxy := range cfg.Proxy {
+		if name, ok := proxy["name"].(string); ok && name != "" {
+			servers = append(servers, name)
+		}
+	}
+	return servers
+}
+
+// writeKnownServers dumps the server names of the ACTIVE profile
 // (subscription order) so the priorities UI can list servers without
-// parsing YAML. Atomic rename: the Kotlin side may read concurrently.
+// parsing YAML.
+//
+// Called only from the active Load() path — NOT from the processor
+// chain. The processor runs on every UnmarshalAndPatch, including the
+// background FetchAndValid() of *inactive* profiles; writing the sidecar
+// there would clobber the global file with an inactive profile's servers
+// and make the UI show the wrong list (Jules CRITICAL). known_servers.json
+// is intentionally global (single active profile at a time), matching the
+// global priorities.json the UI writes.
+//
+// Uses os.CreateTemp for a unique temp name so two concurrent reloads
+// can't interleave writes onto one fixed ".tmp" path and rename a
+// half-written payload over the live file (Jules MAJOR).
 func writeKnownServers(servers []string) {
 	f := knownServersFile{Version: 1, Servers: servers}
 	data, err := json.Marshal(&f)
@@ -71,12 +95,29 @@ func writeKnownServers(servers []string) {
 		return
 	}
 
-	tmp := knownServersPath() + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	dir := constant.Path.HomeDir()
+	tmp, err := os.CreateTemp(dir, knownServersFileName+".*.tmp")
+	if err != nil {
+		log.Warnln("[CustomGroups] create temp for %s: %s", knownServersFileName, err.Error())
+		return
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
 		log.Warnln("[CustomGroups] write %s: %s", knownServersFileName, err.Error())
 		return
 	}
-	if err := os.Rename(tmp, knownServersPath()); err != nil {
+	if err := tmp.Chmod(0o600); err != nil {
+		log.Warnln("[CustomGroups] chmod %s: %s", knownServersFileName, err.Error())
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		log.Warnln("[CustomGroups] close %s: %s", knownServersFileName, err.Error())
+		return
+	}
+	if err := os.Rename(tmpName, knownServersPath()); err != nil {
+		os.Remove(tmpName)
 		log.Warnln("[CustomGroups] rename %s: %s", knownServersFileName, err.Error())
 	}
 }
@@ -151,16 +192,12 @@ func matchRuleTarget(rules []string) (int, string) {
 // default routing behaviour is unchanged until the user explicitly
 // picks a balancer.
 func patchCustomGroups(cfg *config.RawConfig, _ string) error {
-	servers := make([]string, 0, len(cfg.Proxy))
-	for _, proxy := range cfg.Proxy {
-		if name, ok := proxy["name"].(string); ok && name != "" {
-			servers = append(servers, name)
-		}
-	}
+	servers := collectServerNames(cfg)
 
-	// Always refresh the sidecar, even for profiles we skip: the
-	// priorities UI must reflect the latest loaded profile.
-	writeKnownServers(servers)
+	// NOTE: the sidecar (known_servers.json) is deliberately NOT written
+	// here. This processor runs on every UnmarshalAndPatch, including the
+	// background validation of inactive profiles; the sidecar is written
+	// only from the active Load() path (see writeKnownServers).
 
 	if len(servers) == 0 {
 		// provider-based or empty profile: nothing to group

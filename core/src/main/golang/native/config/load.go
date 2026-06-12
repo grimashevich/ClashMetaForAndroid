@@ -66,6 +66,12 @@ func Load(path string) error {
 		return err
 	}
 
+	// Refresh the priorities-UI sidecar with the ACTIVE profile's servers.
+	// Done here (the active-load path) rather than in the processor chain,
+	// which also runs for background validation of inactive profiles and
+	// would otherwise clobber the global sidecar with the wrong servers.
+	writeKnownServers(collectServerNames(rawCfg))
+
 	logDns(rawCfg)
 
 	cfg, err := Parse(rawCfg)

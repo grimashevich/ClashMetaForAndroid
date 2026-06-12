@@ -44,21 +44,30 @@ object ServerPriorityStore {
         }.getOrDefault(emptyMap())
     }
 
-    fun savePriorities(context: Context, priorities: Map<String, Int>) {
-        val root = JSONObject()
-            .put("version", 1)
-            .put("priorities", JSONObject(priorities.toMap()))
+    /**
+     * Persists the priority map. Returns true on success. Wrapped in
+     * runCatching so a write failure (out of storage, permissions) degrades
+     * gracefully instead of throwing out of the caller's IO coroutine and
+     * crashing the activity.
+     */
+    fun savePriorities(context: Context, priorities: Map<String, Int>): Boolean {
+        return runCatching {
+            val root = JSONObject()
+                .put("version", 1)
+                .put("priorities", JSONObject(priorities.toMap()))
 
-        val file = File(context.clashDir, PRIORITIES_FILE)
-        val tmp = File(context.clashDir, "$PRIORITIES_FILE.tmp")
+            val file = File(context.clashDir, PRIORITIES_FILE)
+            val tmp = File(context.clashDir, "$PRIORITIES_FILE.tmp")
 
-        context.clashDir.mkdirs()
-        tmp.writeText(root.toString())
-        if (!tmp.renameTo(file)) {
-            // renameTo across the same directory shouldn't fail; fall back
-            // to a direct write rather than silently dropping the change
-            file.writeText(root.toString())
-            tmp.delete()
-        }
+            context.clashDir.mkdirs()
+            tmp.writeText(root.toString())
+            if (!tmp.renameTo(file)) {
+                // renameTo across the same directory shouldn't fail; fall back
+                // to a direct write rather than silently dropping the change
+                file.writeText(root.toString())
+                tmp.delete()
+            }
+            true
+        }.getOrElse { false }
     }
 }

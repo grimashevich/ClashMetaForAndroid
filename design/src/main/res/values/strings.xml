@@ -373,4 +373,5 @@
     <string name="server_priorities">Server priorities</string>
     <string name="server_priority_input_hint">Lower number — higher priority. Empty — no priority.</string>
     <string name="server_priorities_empty">No servers known yet. Import or update a profile first.</string>
+    <string name="server_priorities_save_failed">Could not save priorities. Check storage and try again.</string>
 </resources>
