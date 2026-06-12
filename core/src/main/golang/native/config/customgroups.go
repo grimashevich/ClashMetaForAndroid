@@ -119,10 +119,18 @@ func orderByPriority(servers []string, priorities map[string]int) []string {
 // matchRuleTarget finds the target of the last MATCH rule, or "" when
 // the profile has none (e.g. `rules: []` — mihomo then routes unmatched
 // traffic to DIRECT).
+//
+// MATCH carries no payload or params, so mihomo's rule parser takes only
+// the SECOND comma field as the target and ignores any trailing fields
+// (see rules/common/base.go: `case "MATCH": target = item[1]`). We must
+// match that exactly: splitting on the first comma only and keeping the
+// remainder would turn a valid `MATCH,DIRECT,no-resolve` into the target
+// "DIRECT,no-resolve", which resolves to no proxy/group and hard-fails
+// the whole config load.
 func matchRuleTarget(rules []string) (int, string) {
 	for i := len(rules) - 1; i >= 0; i-- {
-		parts := strings.SplitN(rules[i], ",", 2)
-		if len(parts) == 2 && strings.EqualFold(strings.TrimSpace(parts[0]), "MATCH") {
+		parts := strings.Split(rules[i], ",")
+		if len(parts) >= 2 && strings.EqualFold(strings.TrimSpace(parts[0]), "MATCH") {
 			return i, strings.TrimSpace(parts[1])
 		}
 	}
@@ -159,7 +167,16 @@ func patchCustomGroups(cfg *config.RawConfig, _ string) error {
 		return nil
 	}
 
+	// Collision set must include BOTH existing group names AND proxy
+	// names: mihomo hard-fails the whole load if an injected group name
+	// duplicates a proxy name too (config.go parses proxies into the same
+	// name space it checks groups against — "the duplicate name"). So a
+	// subscription with a server literally named like one of our groups
+	// would otherwise turn an already-valid profile unloadable.
 	existing := map[string]bool{}
+	for _, name := range servers {
+		existing[name] = true
+	}
 	for _, group := range cfg.ProxyGroup {
 		if name, ok := group["name"].(string); ok {
 			existing[name] = true
@@ -170,7 +187,7 @@ func patchCustomGroups(cfg *config.RawConfig, _ string) error {
 			// The profile already defines one of our names. Re-injecting
 			// would make mihomo fail the whole load on the duplicate, so
 			// leave the profile exactly as the subscription defined it.
-			log.Warnln("[CustomGroups] profile already defines group %q, skipping injection", name)
+			log.Warnln("[CustomGroups] profile already defines name %q, skipping injection", name)
 			return nil
 		}
 	}
