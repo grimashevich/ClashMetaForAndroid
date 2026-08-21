@@ -133,8 +133,10 @@ class ProxyView(
 
         val delayWidth = state.rect.width()
 
-        // fleet badges live between the labels and the delay number, so
-        // they eat into the width the labels may use
+        // Fleet badges stack *under* the delay number rather than beside
+        // it: the right-hand column then costs max(delay, badges) instead
+        // of their sum, which is what keeps server names from being
+        // truncated to "Швейц" in the two- and three-column layouts.
         val badgeSize = state.config.badgeSize
         val badgeGap = state.config.badgeGap
         val badgeCount = (if (state.youtubeBadge != FleetBadge.None) 1 else 0) +
@@ -142,14 +144,13 @@ class ProxyView(
         val badgesWidth = if (badgeCount == 0) {
             0f
         } else {
-            badgeCount * badgeSize + (badgeCount - 1) * badgeGap + state.config.textMargin
+            badgeCount * badgeSize + (badgeCount - 1) * badgeGap
         }
 
         val mainTextWidth = (width -
                 state.config.layoutPadding * 2 -
                 state.config.contentPadding * 2 -
-                delayWidth -
-                badgesWidth -
+                delayWidth.toFloat().coerceAtLeast(badgesWidth) -
                 state.config.textMargin * 2
                 )
             .coerceAtLeast(0f)
@@ -179,10 +180,17 @@ class ProxyView(
         paint.isAntiAlias = true
         paint.color = state.controls
 
-        // draw delay
+        // draw delay — on the title line when badges share the column,
+        // vertically centred otherwise (the layout without fleet data is
+        // exactly what it was before badges existed)
         canvas.apply {
             val x = width - state.config.layoutPadding - state.config.contentPadding - delayWidth
-            val y = height / 2f - textOffset
+            val y = if (badgeCount == 0) {
+                height / 2f - textOffset
+            } else {
+                state.config.layoutPadding +
+                        (height - state.config.layoutPadding * 2) / 3f - textOffset
+            }
 
             drawText(state.delayText, 0, delayCount, x, y, paint)
         }
@@ -205,14 +213,14 @@ class ProxyView(
             drawText(state.subtitle, 0, subtitleCount, x, y, paint)
         }
 
-        // draw fleet badges (last: they reset the shared paint)
+        // draw fleet badges (last: they reset the shared paint), on the
+        // subtitle line, right-aligned under the delay number
         if (badgeCount > 0) {
-            val centerY = height / 2f
-            var right = width -
-                    state.config.layoutPadding -
-                    state.config.contentPadding -
-                    delayWidth -
-                    state.config.textMargin
+            // the subtitle line's optical centre: the text baselines are
+            // offset from it by textOffset, a glyph is centred on it
+            val centerY = state.config.layoutPadding +
+                    (height - state.config.layoutPadding * 2) / 3f * 2
+            var right = width - state.config.layoutPadding - state.config.contentPadding
 
             if (state.geminiBadge != FleetBadge.None) {
                 drawGeminiBadge(canvas, paint, state, right - badgeSize, centerY, badgeSize)
