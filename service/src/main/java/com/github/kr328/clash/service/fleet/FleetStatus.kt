@@ -45,7 +45,18 @@ object FleetStatus {
      */
     const val REFRESH_MINUTE_OF_HOUR = 35
 
-    private const val SCHEMA_VERSION = 1
+    /**
+     * Payload shapes this build accepts, mirroring `supportedSchemas` in
+     * `cfa/native/fleet`. Schema 2 dropped the "error" Gemini value — a
+     * failed check no longer overwrites the last real verdict — and
+     * added the `gemini_*` freshness fields; schema 1 still parses, so a
+     * rolled-back producer does not take the feature down with it.
+     *
+     * Keep this in step with the Go side: accepting a payload here that
+     * Go then refuses would replace good verdicts with a file nothing
+     * reads.
+     */
+    private val SUPPORTED_SCHEMAS = setOf(1, 2)
     private const val CONNECT_TIMEOUT_MS = 15_000
     private const val READ_TIMEOUT_MS = 20_000
 
@@ -172,7 +183,7 @@ object FleetStatus {
         return runCatching {
             val root = JSONObject(body)
 
-            root.optInt("schema") == SCHEMA_VERSION && root.optJSONObject("nodes")?.length()
+            root.optInt("schema") in SUPPORTED_SCHEMAS && root.optJSONObject("nodes")?.length()
                 ?.let { it > 0 } == true
         }.getOrDefault(false)
     }

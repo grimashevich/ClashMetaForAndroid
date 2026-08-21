@@ -184,9 +184,11 @@ class ProxyDesign(
                 val gemini = when (proxy.fleetGemini) {
                     "available" -> context.getString(R.string.fleet_gemini_available)
                     "blocked" -> context.getString(R.string.fleet_gemini_blocked)
-                    // the sweep itself failed on this node (timeout, TLS
-                    // error): no verdict, hence no badge either
-                    "error" -> context.getString(R.string.fleet_gemini_error)
+                    // The sweep has no answer for this node: its own
+                    // check could not run, or the last real verdict aged
+                    // out. Not a refusal — hence no badge, and the
+                    // balancer leaves the node where it already was.
+                    "unknown" -> context.getString(R.string.fleet_gemini_unknown)
                     else -> proxy.fleetGemini
                 }
 
@@ -200,19 +202,24 @@ class ProxyDesign(
                     appendLine(proxy.fleetGeminiDetail)
                 }
 
+                // A verdict can be older than the row that carries it:
+                // since schema 2 a check that could not run keeps the
+                // previous answer instead of erasing it. Only worth a
+                // line when the two timestamps actually differ.
+                val geminiAt = proxy.fleetGeminiCheckedAt
+                if (geminiAt > 0 && proxy.fleetCheckedAt - geminiAt > 60) {
+                    append(context.getString(R.string.fleet_gemini_measured))
+                    append(": ")
+                    appendLine(relativeTime(geminiAt))
+                }
+
                 if (!proxy.fleetReachable) {
                     appendLine(context.getString(R.string.fleet_unreachable))
                 }
 
                 append(context.getString(R.string.fleet_checked_at))
                 append(": ")
-                append(
-                    DateUtils.getRelativeTimeSpanString(
-                        proxy.fleetCheckedAt * 1000,
-                        System.currentTimeMillis(),
-                        DateUtils.MINUTE_IN_MILLIS,
-                    )
-                )
+                append(relativeTime(proxy.fleetCheckedAt))
             }
         }
 
@@ -222,6 +229,14 @@ class ProxyDesign(
             .setPositiveButton(R.string.ok, null)
             .show()
     }
+
+    /** Unix seconds -> "5 minutes ago", for the fleet detail sheet. */
+    private fun relativeTime(unixSeconds: Long): CharSequence =
+        DateUtils.getRelativeTimeSpanString(
+            unixSeconds * 1000,
+            System.currentTimeMillis(),
+            DateUtils.MINUTE_IN_MILLIS,
+        )
 
     fun requestUrlTesting() {
         urlTesting = true

@@ -38,8 +38,9 @@ class ProxyViewState(
      * here instead of on every frame.
      *
      * A verdict counts only when the prober actually reached the node;
-     * Go has already dropped anything staler than its freshness window,
-     * so empty fields here mean "unknown", not "old".
+     * Go has already dropped anything staler than its freshness window
+     * and folded every unusable value to "unknown", so a missing badge
+     * here means "no answer", never "old" or "unrecognised".
      */
     private val hasVerdict = !proxy.isGroup && proxy.fleetReachable && proxy.fleetCheckedAt > 0
 
@@ -51,6 +52,8 @@ class ProxyViewState(
         !hasVerdict -> FleetBadge.None
         proxy.fleetGemini == "available" -> FleetBadge.Foreign
         proxy.fleetGemini == "blocked" -> FleetBadge.Russian
+        // "unknown": the sweep has no answer for this node. No badge —
+        // drawing the grey one would claim it looks Russian.
         else -> FleetBadge.None
     }
 

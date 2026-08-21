@@ -39,13 +39,33 @@ func writeFeed(t *testing.T, body string) string {
 }
 
 func feed(nodes string) string {
-	return fmt.Sprintf(`{"schema":1,"updated_at":%d,"nodes":{%s}}`, time.Now().Unix(), nodes)
+	return feedSchema(2, nodes)
 }
 
+func feedSchema(schema int, nodes string) string {
+	return fmt.Sprintf(`{"schema":%d,"updated_at":%d,"nodes":{%s}}`,
+		schema, time.Now().Unix(), nodes)
+}
+
+// node writes a schema 2 row whose Gemini verdict was measured in the
+// same sweep that produced the row.
 func node(key, name, gemini, gl string, reachable bool, checkedAt time.Time) string {
+	return nodeAt(key, name, gemini, gl, reachable, checkedAt, checkedAt)
+}
+
+// nodeAt separates the two timestamps schema 2 distinguishes: when the
+// row was refreshed, and when the Gemini verdict inside it was actually
+// obtained.
+func nodeAt(key, name, gemini, gl string, reachable bool, checkedAt, geminiCheckedAt time.Time) string {
 	return fmt.Sprintf(
-		`%q:{"proxy":%q,"name":%q,"exit_ip":"203.0.113.7","youtube_gl":%q,"gemini":%q,"gemini_detail":null,"reachable":%t,"checked_at":%d}`,
-		key, key, name, gl, gemini, reachable, checkedAt.Unix(),
+		`%q:{"proxy":%q,"name":%q,"exit_ip":"203.0.113.7","youtube_gl":%q,`+
+			`"youtube_gl_fresh":true,"youtube_gl_checked_at":%d,`+
+			`"gemini":%q,"gemini_fresh":%t,"gemini_checked_at":%d,"gemini_age_seconds":%d,`+
+			`"gemini_probe":"ok","gemini_detail":%q,"measured":true,"reachable":%t,"checked_at":%d}`,
+		key, key, name, gl, checkedAt.Unix(),
+		gemini, geminiCheckedAt.Equal(checkedAt), geminiCheckedAt.Unix(),
+		int64(checkedAt.Sub(geminiCheckedAt).Seconds()),
+		"detail for "+name, reachable, checkedAt.Unix(),
 	)
 }
 
@@ -139,7 +159,7 @@ func TestRegionOf(t *testing.T) {
 			node("Литва-tcp", "Литва", "blocked", "RU", true, now)+","+
 			node("Италия-tcp", "Италия", "available", "RU", true, now)+","+
 			node("Чехия-tcp", "Чехия", "available", "CZ", false, now)+","+
-			node("Латвия-tcp", "Латвия", "", "LV", true, now),
+			node("Латвия-tcp", "Латвия", "unknown", "LV", true, now),
 	))
 
 	tests := []struct {
@@ -155,7 +175,8 @@ func TestRegionOf(t *testing.T) {
 		{"🇮🇹 Италия", classForeign, "RU", true},
 		// prober could not reach it: no usable verdict
 		{"🇨🇿 Чехия", "", "", false},
-		// gemini field empty: no usable verdict
+		// no data for this node: not a verdict, and specifically not a
+		// reason to treat it as Russian
 		{"🇱🇻 Латвия", "", "", false},
 		{"🇩🇪 Германия", "", "", false},
 	}
@@ -166,6 +187,99 @@ func TestRegionOf(t *testing.T) {
 			t.Errorf("RegionOf(%q) = (%q, %q, %v), want (%q, %q, %v)",
 				tt.proxy, class, country, ok, tt.wantClass, tt.wantCountry, tt.wantOK)
 		}
+	}
+}
+
+// The Gemini verdict is the one signal that decides routing, so the
+// three values it can take are pinned down here rather than left to the
+// callers' switch statements.
+func TestGeminiValues(t *testing.T) {
+	now := time.Now()
+	writeFeed(t, feed(
+		node("Швейцария-tcp", "Швейцария", "available", "CH", true, now)+","+
+			node("Литва-tcp", "Литва", "blocked", "RU", true, now)+","+
+			node("Латвия-tcp", "Латвия", "unknown", "LV", true, now)+","+
+			// schema 1's value, and anything a future producer invents
+			node("Чехия-tcp", "Чехия", "error", "CZ", true, now)+","+
+			node("Польша-tcp", "Польша", "", "PL", true, now),
+	))
+
+	tests := []struct {
+		proxy  string
+		gemini string
+	}{
+		{"🇨🇭 Швейцария", geminiAvailable},
+		{"🇱🇹 Литва", geminiBlocked},
+		{"🇱🇻 Латвия", geminiUnknown},
+		{"🇨🇿 Чехия", geminiUnknown},
+		{"🇵🇱 Польша", geminiUnknown},
+	}
+
+	for _, tt := range tests {
+		entry, ok := EntryOf(tt.proxy)
+		if !ok {
+			t.Errorf("EntryOf(%q) missing; the row must still be served", tt.proxy)
+			continue
+		}
+		if entry.Gemini != tt.gemini {
+			t.Errorf("EntryOf(%q).Gemini = %q, want %q", tt.proxy, entry.Gemini, tt.gemini)
+		}
+
+		_, _, verdict := RegionOf(tt.proxy)
+		if want := tt.gemini != geminiUnknown; verdict != want {
+			t.Errorf("RegionOf(%q) ok = %v, want %v", tt.proxy, verdict, want)
+		}
+	}
+}
+
+// The point of schema 2: a check that could not run does not erase the
+// last real answer, so a verdict older than its row still counts.
+func TestGeminiVerdictSurvivesItsRow(t *testing.T) {
+	now := time.Now()
+	measured := now.Add(-3 * time.Hour)
+	writeFeed(t, feed(nodeAt("Литва-tcp", "Литва", "blocked", "RU", true, now, measured)))
+
+	class, _, ok := RegionOf("🇱🇹 Литва")
+	if !ok || class != classRU {
+		t.Fatalf("RegionOf = (%q, %v), want (ru, true): a verdict inside the freshness window counts", class, ok)
+	}
+}
+
+// … but only up to the same six hours everything else uses. Past that
+// the row stays (exit IP, YouTube) while the verdict reads "unknown".
+func TestStaleGeminiVerdictReadsUnknown(t *testing.T) {
+	now := time.Now()
+	measured := now.Add(-FreshMaxAge - time.Minute)
+	writeFeed(t, feed(nodeAt("Литва-tcp", "Литва", "blocked", "RU", true, now, measured)))
+
+	entry, ok := EntryOf("🇱🇹 Литва")
+	if !ok {
+		t.Fatal("row was dropped; want it served with an unknown verdict")
+	}
+	if entry.Gemini != geminiUnknown {
+		t.Errorf("Gemini = %q, want unknown", entry.Gemini)
+	}
+	if entry.GeminiDetail != "" {
+		t.Errorf("GeminiDetail = %q, want it cleared with the verdict", entry.GeminiDetail)
+	}
+	if entry.ExitIP == "" {
+		t.Error("ExitIP was cleared; only the verdict expires")
+	}
+	if _, _, verdict := RegionOf("🇱🇹 Литва"); verdict {
+		t.Error("expired verdict still classified the node")
+	}
+}
+
+// A sidecar left behind by an older build must keep working rather than
+// disabling every verdict.
+func TestSchema1StillParses(t *testing.T) {
+	now := time.Now()
+	writeFeed(t, feedSchema(1,
+		node("Швейцария-tcp", "Швейцария", "available", "CH", true, now)))
+
+	class, _, ok := RegionOf("🇨🇭 Швейцария")
+	if !ok || class != classForeign {
+		t.Fatalf("RegionOf on a schema 1 feed = (%q, %v), want (foreign, true)", class, ok)
 	}
 }
 

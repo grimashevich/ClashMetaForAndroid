@@ -48,16 +48,31 @@ const (
 	// runs per proxy per dial, so this must stay cheap.
 	reloadThrottle = 2 * time.Second
 
-	// schemaVersion is the only payload shape understood here. A newer
-	// feed is ignored (and logged) rather than half-parsed.
-	schemaVersion = 1
-
 	geminiAvailable = "available"
 	geminiBlocked   = "blocked"
+
+	// geminiUnknown is schema 2's explicit "no data": the sweep could
+	// not obtain an answer, or the last real one aged out. It is not a
+	// refusal and must never move a node into the Russian bucket —
+	// only geminiBlocked does that. Anything unrecognised folds here,
+	// including schema 1's "error", which conflated "our own check
+	// failed" (quota exhausted, connection dropped) with a Google
+	// verdict and used to push healthy nodes out of the foreign bucket.
+	geminiUnknown = "unknown"
 
 	classRU      = "ru"
 	classForeign = "foreign"
 )
+
+// supportedSchemas lists the payload shapes this build understands. An
+// unknown schema is ignored (and logged) rather than half-parsed.
+//
+// Schema 2 removed the "error" gemini value, kept the last real verdict
+// across failed checks, and added the gemini_* freshness fields. Schema
+// 1 payloads still parse correctly — "error" folds to "unknown" — so a
+// sidecar written by an older build, or a producer rolled back, keeps
+// working instead of silently disabling every verdict.
+var supportedSchemas = map[int]bool{1: true, 2: true}
 
 // transportSuffixes are the trailing `-xxx` tags the feed's node keys
 // carry (`Швейцария-tcp`) but subscription proxy names usually do not.
@@ -76,7 +91,9 @@ var transportSuffixes = map[string]bool{
 	"xhttp":   true,
 }
 
-// Entry is one node's verdict, as handed to the UI.
+// Entry is one node's verdict, as handed to the UI. Gemini is always
+// one of "available", "blocked" or "unknown" — the feed's raw value is
+// folded on the way in, so no consumer has to know the wire vocabulary.
 type Entry struct {
 	Proxy        string
 	Name         string
@@ -86,27 +103,60 @@ type Entry struct {
 	GeminiDetail string
 	Reachable    bool
 	CheckedAt    int64
+
+	// GeminiCheckedAt is when the Gemini verdict was actually obtained.
+	// Since schema 2 this can be much older than CheckedAt: a failed
+	// check no longer overwrites the last real answer, so the row is
+	// refreshed hourly while the verdict inside it may not be. Zero
+	// means the feed did not report it (schema 1) and CheckedAt stands
+	// in.
+	GeminiCheckedAt int64
 }
 
-// fresh reports whether the verdict is recent enough to act on. A
-// checked_at in the future (clock skew between phone and prober) counts
-// as fresh: the data is new, our clock is what is wrong.
-func (e Entry) fresh(now time.Time) bool {
-	if e.CheckedAt <= 0 {
+// freshAt applies the one freshness rule used everywhere. A timestamp
+// in the future (clock skew between phone and prober) counts as fresh:
+// the data is new, our clock is what is wrong.
+func freshAt(at int64, now time.Time) bool {
+	if at <= 0 {
 		return false
 	}
-	return now.Sub(time.Unix(e.CheckedAt, 0)) < FreshMaxAge
+	return now.Sub(time.Unix(at, 0)) < FreshMaxAge
 }
 
+// fresh reports whether the node's row is recent enough to act on.
+func (e Entry) fresh(now time.Time) bool {
+	return freshAt(e.CheckedAt, now)
+}
+
+// geminiFresh reports whether the Gemini verdict itself is still
+// usable. The producer already expires verdicts older than six hours
+// into "unknown"; the rule is repeated here because the sidecar on disk
+// can be much older than the sweep that wrote it (phone offline, every
+// refresh failing), and what matters is the age of the measurement, not
+// the age of the download.
+func (e Entry) geminiFresh(now time.Time) bool {
+	if e.GeminiCheckedAt > 0 {
+		return freshAt(e.GeminiCheckedAt, now)
+	}
+
+	return freshAt(e.CheckedAt, now)
+}
+
+// rawNode mirrors only the fields acted on. The feed also carries
+// gemini_fresh (was it re-measured in the last run) and
+// gemini_age_seconds (the producer's own view of the age) — both are
+// derivable from gemini_checked_at, which is the one we trust because
+// it is comparable against our own clock.
 type rawNode struct {
-	Proxy        string  `json:"proxy"`
-	Name         string  `json:"name"`
-	ExitIP       string  `json:"exit_ip"`
-	YoutubeGL    string  `json:"youtube_gl"`
-	Gemini       string  `json:"gemini"`
-	GeminiDetail *string `json:"gemini_detail"`
-	Reachable    bool    `json:"reachable"`
-	CheckedAt    int64   `json:"checked_at"`
+	Proxy           string  `json:"proxy"`
+	Name            string  `json:"name"`
+	ExitIP          string  `json:"exit_ip"`
+	YoutubeGL       string  `json:"youtube_gl"`
+	Gemini          string  `json:"gemini"`
+	GeminiDetail    *string `json:"gemini_detail"`
+	GeminiCheckedAt int64   `json:"gemini_checked_at"`
+	Reachable       bool    `json:"reachable"`
+	CheckedAt       int64   `json:"checked_at"`
 }
 
 type rawFile struct {
@@ -186,6 +236,22 @@ func stripTransportSuffix(name string) string {
 	return name
 }
 
+// normalizeGemini folds the feed's value to one of the three the rest
+// of the code knows. Everything unrecognised becomes "unknown": "we
+// have no answer" is the only safe reading of a value we cannot
+// interpret, because a wrong "blocked" would route traffic away from a
+// working node.
+func normalizeGemini(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case geminiAvailable:
+		return geminiAvailable
+	case geminiBlocked:
+		return geminiBlocked
+	default:
+		return geminiUnknown
+	}
+}
+
 // keysOf lists the normalised keys a name should be reachable by.
 func keysOf(name string) []string {
 	if name == "" {
@@ -215,14 +281,15 @@ func buildIndex(nodes map[string]rawNode) map[string]*Entry {
 		}
 
 		entry := &Entry{
-			Proxy:        node.Proxy,
-			Name:         node.Name,
-			ExitIP:       node.ExitIP,
-			YoutubeGL:    strings.ToUpper(node.YoutubeGL),
-			Gemini:       strings.ToLower(node.Gemini),
-			GeminiDetail: detail,
-			Reachable:    node.Reachable,
-			CheckedAt:    node.CheckedAt,
+			Proxy:           node.Proxy,
+			Name:            node.Name,
+			ExitIP:          node.ExitIP,
+			YoutubeGL:       strings.ToUpper(node.YoutubeGL),
+			Gemini:          normalizeGemini(node.Gemini),
+			GeminiDetail:    detail,
+			GeminiCheckedAt: node.GeminiCheckedAt,
+			Reachable:       node.Reachable,
+			CheckedAt:       node.CheckedAt,
 		}
 
 		for _, name := range []string{key, node.Proxy, node.Name} {
@@ -332,8 +399,8 @@ func reload() {
 		return
 	}
 
-	if parsed.Schema != schemaVersion {
-		log.Warnln("[Fleet] %s has schema %d, expected %d — ignoring", FileName, parsed.Schema, schemaVersion)
+	if !supportedSchemas[parsed.Schema] {
+		log.Warnln("[Fleet] %s has unsupported schema %d — ignoring", FileName, parsed.Schema)
 		return
 	}
 
@@ -373,8 +440,23 @@ func lookup(proxyName string) (Entry, bool) {
 // than something wrong.
 func EntryOf(proxyName string) (Entry, bool) {
 	entry, ok := lookup(proxyName)
-	if !ok || !entry.fresh(time.Now()) {
+	if !ok {
 		return Entry{}, false
+	}
+
+	now := time.Now()
+	if !entry.fresh(now) {
+		return Entry{}, false
+	}
+
+	if entry.Gemini != geminiUnknown && !entry.geminiFresh(now) {
+		// The row is current but the verdict inside it aged out. Report
+		// exactly what the producer would report — "unknown" — so the
+		// badge, the sort and the balancer stop acting on it at the
+		// same moment, and the refusal text does not outlive the
+		// refusal it explains.
+		entry.Gemini = geminiUnknown
+		entry.GeminiDetail = ""
 	}
 
 	return entry, true
@@ -383,8 +465,9 @@ func EntryOf(proxyName string) (Entry, bool) {
 // RegionOf answers outboundgroup.RegionProvider: Gemini is the priority
 // signal — it answers only for non-Russian exits, so "available" means
 // the node behaves as foreign and "blocked" means Google treats it as
-// Russian. A node the prober could not reach carries no usable verdict
-// and is left to the on-device probe.
+// Russian. Only those two values decide anything: "unknown" and a node
+// the prober could not reach carry no usable verdict and are left to
+// whatever was already decided, or to the on-device probe.
 //
 // The country returned alongside is the YouTube attribution, which is a
 // separate (and sometimes disagreeing) signal — it labels the exit, it
@@ -401,6 +484,11 @@ func RegionOf(proxyName string) (class string, country string, ok bool) {
 	case geminiBlocked:
 		return classRU, entry.YoutubeGL, true
 	default:
+		// "unknown" is the absence of data, not a verdict: deciding
+		// here would move a node on no evidence. Answering "no verdict"
+		// keeps the classification the groups already hold (see
+		// regionStore.remember on the mihomo side) until the next
+		// hourly snapshot brings a real answer.
 		return "", "", false
 	}
 }

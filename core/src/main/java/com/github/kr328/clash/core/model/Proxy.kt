@@ -14,11 +14,15 @@ data class Proxy(
     val delay: Int,
     var isGroup: Boolean,
     // Fleet-status annotation, filled by cfa/native/fleet from the hourly
-    // per-node sweep. Empty/zero means "no fresh verdict" — an unknown
-    // node, a stale feed, or a nested group. Defaults keep the model
-    // decodable from a core build that predates these fields.
+    // per-node sweep. fleetGemini is always "available", "blocked" or
+    // "unknown"; empty means the feed does not cover this row at all (a
+    // node it never saw, a stale feed, a nested group). "unknown" is the
+    // sweep saying it has no answer — never a reason to treat the node
+    // as Russian. Defaults keep the model decodable from a core build
+    // that predates these fields.
     val fleetGemini: String = "",
     val fleetGeminiDetail: String = "",
+    val fleetGeminiCheckedAt: Long = 0,
     val fleetYoutubeGl: String = "",
     val fleetExitIp: String = "",
     val fleetReachable: Boolean = false,

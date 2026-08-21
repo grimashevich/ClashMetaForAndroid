@@ -389,7 +389,8 @@
     <string name="fleet_gemini">Gemini</string>
     <string name="fleet_gemini_available">works</string>
     <string name="fleet_gemini_blocked">blocked</string>
-    <string name="fleet_gemini_error">check failed</string>
+    <string name="fleet_gemini_unknown">no data</string>
+    <string name="fleet_gemini_measured">Gemini verdict measured</string>
     <string name="fleet_checked_at">Checked</string>
     <string name="fleet_unreachable">Prober could not reach this node</string>
     <string name="fleet_no_data">No fresh fleet data for this server</string>

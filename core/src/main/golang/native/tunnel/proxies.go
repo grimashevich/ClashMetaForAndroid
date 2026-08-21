@@ -37,12 +37,13 @@ type Proxy struct {
 	// fresh verdict for this server (unknown node, stale data, or a
 	// nested group — groups are never annotated). The UI draws the
 	// YouTube/Gemini badges from these fields; see cfa/native/fleet.
-	FleetGemini       string `json:"fleetGemini"`
-	FleetGeminiDetail string `json:"fleetGeminiDetail"`
-	FleetYoutubeGl    string `json:"fleetYoutubeGl"`
-	FleetExitIp       string `json:"fleetExitIp"`
-	FleetReachable    bool   `json:"fleetReachable"`
-	FleetCheckedAt    int64  `json:"fleetCheckedAt"`
+	FleetGemini          string `json:"fleetGemini"`
+	FleetGeminiDetail    string `json:"fleetGeminiDetail"`
+	FleetGeminiCheckedAt int64  `json:"fleetGeminiCheckedAt"`
+	FleetYoutubeGl       string `json:"fleetYoutubeGl"`
+	FleetExitIp          string `json:"fleetExitIp"`
+	FleetReachable       bool   `json:"fleetReachable"`
+	FleetCheckedAt       int64  `json:"fleetCheckedAt"`
 }
 
 type ProxyGroup struct {
@@ -199,7 +200,8 @@ func PatchSelector(selector, name string) bool {
 
 // fleetRank buckets a proxy for the fleet sort: exits that behave as
 // foreign first, Russian-looking exits next, everything without a
-// verdict (unknown nodes, stale feed, nested groups) last.
+// verdict last — a node the sweep could not measure ("unknown"), an
+// unreachable one, a stale feed or a nested group.
 func fleetRank(p *Proxy) int {
 	switch {
 	case !p.FleetReachable:
@@ -239,6 +241,7 @@ func annotateFleet(p *Proxy) {
 
 	p.FleetGemini = entry.Gemini
 	p.FleetGeminiDetail = entry.GeminiDetail
+	p.FleetGeminiCheckedAt = entry.GeminiCheckedAt
 	p.FleetYoutubeGl = entry.YoutubeGL
 	p.FleetExitIp = entry.ExitIP
 	p.FleetReachable = entry.Reachable

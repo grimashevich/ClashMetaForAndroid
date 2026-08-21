@@ -347,7 +347,8 @@
     <string name="fleet_gemini">Gemini</string>
     <string name="fleet_gemini_available">работает</string>
     <string name="fleet_gemini_blocked">заблокирован</string>
-    <string name="fleet_gemini_error">проверка не удалась</string>
+    <string name="fleet_gemini_unknown">нет данных</string>
+    <string name="fleet_gemini_measured">Вердикт Gemini получен</string>
     <string name="fleet_checked_at">Проверено</string>
     <string name="fleet_unreachable">Проверяющий сервис не достучался до ноды</string>
     <string name="fleet_no_data">Нет свежих данных о статусе этого сервера</string>
