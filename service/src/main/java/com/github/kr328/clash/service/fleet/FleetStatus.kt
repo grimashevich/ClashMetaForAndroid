@@ -176,7 +176,7 @@ object FleetStatus {
 
     /**
      * Cheap sanity check before overwriting good data: the payload must
-     * parse, carry the schema this build understands, and describe at
+     * parse, carry a schema this build understands, and describe at
      * least one node.
      */
     private fun isPlausibleFeed(body: String): Boolean {
