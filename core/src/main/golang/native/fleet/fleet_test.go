@@ -277,3 +277,26 @@ func TestConcurrentColdLookups(t *testing.T) {
 		t.Fatalf("%d/%d concurrent cold lookups missed the snapshot", n, workers)
 	}
 }
+
+// TestCorruptRewriteKeepsPreviousVerdicts covers the case where a
+// refresh lands a payload we cannot use: the previous verdicts must
+// survive. Serving nothing would silently hand every server back to the
+// on-device probe; serving garbage would mislabel them.
+func TestCorruptRewriteKeepsPreviousVerdicts(t *testing.T) {
+	now := time.Now()
+	path := writeFeed(t, feed(node("Литва-tcp", "Литва", "blocked", "RU", true, now)))
+
+	if class, _, ok := RegionOf("🇱🇹 Литва"); !ok || class != classRU {
+		t.Fatalf("initial class = %q (ok=%v), want ru", class, ok)
+	}
+
+	if err := os.WriteFile(path, []byte("<html>captcha</html>"), 0o644); err != nil {
+		t.Fatalf("rewrite feed: %s", err)
+	}
+
+	lastAttempt.Store(0)
+
+	if class, _, ok := RegionOf("🇱🇹 Литва"); !ok || class != classRU {
+		t.Fatalf("after corrupt rewrite = %q (ok=%v), want the previous ru verdict", class, ok)
+	}
+}

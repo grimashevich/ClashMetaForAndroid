@@ -123,8 +123,13 @@ type snapshot struct {
 }
 
 var (
-	mu       sync.RWMutex
-	current  *snapshot
+	mu      sync.RWMutex
+	current *snapshot
+
+	// the file revision last *examined* (not necessarily loaded): a
+	// corrupt or future-schema payload is remembered too, so it is
+	// diagnosed once instead of re-read and re-logged every couple of
+	// seconds until someone fixes it
 	lastMod  int64
 	lastSize int64
 
@@ -302,12 +307,18 @@ func reload() {
 	mod, size := info.ModTime().UnixNano(), info.Size()
 
 	mu.RLock()
-	unchanged := current != nil && mod == lastMod && size == lastSize
+	unchanged := mod == lastMod && size == lastSize
 	mu.RUnlock()
 
 	if unchanged {
 		return
 	}
+
+	// Claim this revision before parsing it: whatever happens below, the
+	// same bytes must not be examined again until the file changes.
+	mu.Lock()
+	lastMod, lastSize = mod, size
+	mu.Unlock()
 
 	data, err := os.ReadFile(path())
 	if err != nil {
@@ -329,7 +340,7 @@ func reload() {
 	snap := &snapshot{updatedAt: parsed.UpdatedAt, byKey: buildIndex(parsed.Nodes)}
 
 	mu.Lock()
-	current, lastMod, lastSize = snap, mod, size
+	current = snap
 	mu.Unlock()
 
 	age := time.Since(time.Unix(parsed.UpdatedAt, 0)).Truncate(time.Second)
