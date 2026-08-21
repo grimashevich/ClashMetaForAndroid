@@ -9,6 +9,16 @@ import com.github.kr328.clash.design.model.ProxyState
 import kotlin.math.absoluteValue
 import kotlin.math.max
 
+/**
+ * How a fleet-status badge is painted: [Foreign] = the exit behaves like
+ * a non-Russian one (coloured), [Russian] = Google treats it as Russian
+ * (grey), [None] = no fresh verdict, so nothing is drawn at all rather
+ * than a third state the user would have to decode.
+ */
+enum class FleetBadge {
+    None, Foreign, Russian
+}
+
 class ProxyViewState(
     val config: ProxyViewConfig,
     val proxy: Proxy,
@@ -18,6 +28,42 @@ class ProxyViewState(
     val paint = Paint()
     val rect = Rect()
     val path = Path()
+
+    /** Separate from [path] so badge geometry cannot disturb the card clip. */
+    val badgePath = Path()
+
+    /**
+     * Fleet verdicts are per-server facts that never change for the life
+     * of a row (a refresh rebuilds the list), so they are resolved once
+     * here instead of on every frame.
+     *
+     * A verdict counts only when the prober actually reached the node;
+     * Go has already dropped anything staler than its freshness window,
+     * so empty fields here mean "unknown", not "old".
+     */
+    private val hasVerdict = !proxy.isGroup && proxy.fleetReachable && proxy.fleetCheckedAt > 0
+
+    /**
+     * Gemini is the primary signal: it answers only for non-Russian
+     * exits, so "available" is exactly "this exit behaves as foreign".
+     */
+    val geminiBadge: FleetBadge = when {
+        !hasVerdict -> FleetBadge.None
+        proxy.fleetGemini == "available" -> FleetBadge.Foreign
+        proxy.fleetGemini == "blocked" -> FleetBadge.Russian
+        else -> FleetBadge.None
+    }
+
+    /**
+     * YouTube's own attribution, which can disagree with Gemini (an exit
+     * can be geolocated to RU by YouTube while Gemini still answers).
+     * Shown as its own badge rather than folded into the classification.
+     */
+    val youtubeBadge: FleetBadge = when {
+        !hasVerdict || proxy.fleetYoutubeGl.isEmpty() -> FleetBadge.None
+        proxy.fleetYoutubeGl == "RU" -> FleetBadge.Russian
+        else -> FleetBadge.Foreign
+    }
 
     var title: String = ""
     var subtitle: String = ""

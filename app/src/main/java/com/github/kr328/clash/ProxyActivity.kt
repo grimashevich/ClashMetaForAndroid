@@ -5,7 +5,10 @@ import com.github.kr328.clash.core.Clash
 import com.github.kr328.clash.core.model.Proxy
 import com.github.kr328.clash.design.ProxyDesign
 import com.github.kr328.clash.design.model.ProxyState
+import com.github.kr328.clash.service.fleet.FleetStatus
 import com.github.kr328.clash.util.withClash
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
@@ -92,9 +95,24 @@ class ProxyActivity : BaseActivity<ProxyDesign>() {
                         }
                         is ProxyDesign.Request.UrlTest -> {
                             launch {
+                                // The delay-test button is the user's
+                                // "re-check the servers" gesture, so it
+                                // also refreshes the fleet verdicts. Both
+                                // run in parallel and the reload waits for
+                                // them, so the numbers and the badges
+                                // update in the same frame.
+                                val fleet = async(Dispatchers.IO) {
+                                    FleetStatus.refresh(
+                                        this@ProxyActivity,
+                                        minAgeMillis = 60 * 1000L,
+                                    )
+                                }
+
                                 withClash {
                                     healthCheck(names[it.index])
                                 }
+
+                                fleet.await()
 
                                 design.requests.send(ProxyDesign.Request.Reload(it.index))
                             }

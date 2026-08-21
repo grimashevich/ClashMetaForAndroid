@@ -332,4 +332,22 @@
     <string name="server_priority_input_hint">Меньше число — выше приоритет. Пусто — без приоритета.</string>
     <string name="server_priorities_empty">Серверы ещё не известны. Сначала импортируйте или обновите профиль.</string>
     <string name="server_priorities_save_failed">Не удалось сохранить приоритеты. Проверьте память и повторите.</string>
+    <string name="fleet_sort">По статусу нод</string>
+    <string name="fleet_status">Статус нод</string>
+    <string name="fleet_status_url">URL сервиса статуса нод</string>
+    <string name="fleet_status_url_placeholder">Встроен в сборку</string>
+    <string name="fleet_status_url_empty">Встроен в сборку</string>
+    <string name="fleet_refresh_now">Обновить статус нод</string>
+    <string name="fleet_refresh_now_summary">Заново скачать вердикты Gemini/YouTube по каждой ноде</string>
+    <string name="fleet_refresh_updated">Статус нод обновлён</string>
+    <string name="fleet_refresh_failed">Не удалось обновить статус нод</string>
+    <string name="fleet_refresh_not_configured">URL сервиса статуса нод не задан</string>
+    <string name="fleet_exit_ip">IP выхода</string>
+    <string name="fleet_youtube">YouTube</string>
+    <string name="fleet_gemini">Gemini</string>
+    <string name="fleet_gemini_available">работает</string>
+    <string name="fleet_gemini_blocked">заблокирован</string>
+    <string name="fleet_checked_at">Проверено</string>
+    <string name="fleet_unreachable">Проверяющий сервис не достучался до ноды</string>
+    <string name="fleet_no_data">Нет свежих данных о статусе этого сервера</string>
 </resources>

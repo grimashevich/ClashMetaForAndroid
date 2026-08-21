@@ -2,6 +2,7 @@ package com.github.kr328.clash.design
 
 import android.content.Context
 import android.content.res.ColorStateList
+import android.text.format.DateUtils
 import android.view.View
 import android.widget.Toast
 import androidx.viewpager2.widget.ViewPager2
@@ -18,6 +19,7 @@ import com.github.kr328.clash.design.util.applyFrom
 import com.github.kr328.clash.design.util.layoutInflater
 import com.github.kr328.clash.design.util.resolveThemedColor
 import com.github.kr328.clash.design.util.root
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.tabs.TabLayoutMediator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -116,9 +118,11 @@ class ProxyDesign(
                     surface,
                     config,
                     List(groupNames.size) { index ->
-                        ProxyAdapter(config) { name ->
-                            requests.trySend(Request.Select(index, name))
-                        }
+                        ProxyAdapter(
+                            config,
+                            clicked = { name -> requests.trySend(Request.Select(index, name)) },
+                            longClicked = ::showFleetDetails,
+                        )
                     }
                 ) {
                     if (it == currentItem)
@@ -149,6 +153,71 @@ class ProxyDesign(
                     binding.pagesView.setCurrentItem(initialPosition, false)
             }
         }
+    }
+
+    /**
+     * Long-press detail sheet for one server: what the hourly fleet sweep
+     * saw from the outside — exit IP, the country YouTube attributes to
+     * it, whether Gemini answers (with the refusal text, which names the
+     * reason) and how long ago that was measured.
+     *
+     * The row itself only has room for two badges; everything the badges
+     * compress away lives here.
+     */
+    private fun showFleetDetails(proxy: Proxy) {
+        val message = if (proxy.isGroup || proxy.fleetCheckedAt <= 0) {
+            context.getString(R.string.fleet_no_data)
+        } else {
+            buildString {
+                if (proxy.fleetExitIp.isNotEmpty()) {
+                    append(context.getString(R.string.fleet_exit_ip))
+                    append(": ")
+                    appendLine(proxy.fleetExitIp)
+                }
+
+                if (proxy.fleetYoutubeGl.isNotEmpty()) {
+                    append(context.getString(R.string.fleet_youtube))
+                    append(": ")
+                    appendLine(proxy.fleetYoutubeGl)
+                }
+
+                val gemini = when (proxy.fleetGemini) {
+                    "available" -> context.getString(R.string.fleet_gemini_available)
+                    "blocked" -> context.getString(R.string.fleet_gemini_blocked)
+                    else -> proxy.fleetGemini
+                }
+
+                if (gemini.isNotEmpty()) {
+                    append(context.getString(R.string.fleet_gemini))
+                    append(": ")
+                    appendLine(gemini)
+                }
+
+                if (proxy.fleetGeminiDetail.isNotEmpty()) {
+                    appendLine(proxy.fleetGeminiDetail)
+                }
+
+                if (!proxy.fleetReachable) {
+                    appendLine(context.getString(R.string.fleet_unreachable))
+                }
+
+                append(context.getString(R.string.fleet_checked_at))
+                append(": ")
+                append(
+                    DateUtils.getRelativeTimeSpanString(
+                        proxy.fleetCheckedAt * 1000,
+                        System.currentTimeMillis(),
+                        DateUtils.MINUTE_IN_MILLIS,
+                    )
+                )
+            }
+        }
+
+        MaterialAlertDialogBuilder(context)
+            .setTitle(proxy.title)
+            .setMessage(message)
+            .setPositiveButton(R.string.ok, null)
+            .show()
     }
 
     fun requestUrlTesting() {

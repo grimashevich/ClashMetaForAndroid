@@ -6,8 +6,13 @@ import com.github.kr328.clash.common.Global
 import com.github.kr328.clash.common.compat.currentProcessName
 import com.github.kr328.clash.common.log.Log
 import com.github.kr328.clash.remote.Remote
+import com.github.kr328.clash.service.fleet.FleetStatus
 import com.github.kr328.clash.service.util.sendServiceRecreated
 import com.github.kr328.clash.util.clashDir
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 
@@ -30,8 +35,25 @@ class MainApplication : Application() {
 
         if (processName == packageName) {
             Remote.launch()
+
+            refreshFleetStatus()
         } else {
             sendServiceRecreated()
+        }
+    }
+
+    /**
+     * "Refresh on every app start", per the feature's contract. Fire and
+     * forget: the verdicts are advisory, everything that reads them
+     * degrades to "no badges" when they are missing, and the service
+     * keeps its own hourly schedule.
+     *
+     * The min-age guard makes repeated launches (or a process restart
+     * right after one) cheap instead of hammering the host.
+     */
+    private fun refreshFleetStatus() {
+        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            FleetStatus.refresh(this@MainApplication, minAgeMillis = 5 * 60 * 1000L)
         }
     }
 

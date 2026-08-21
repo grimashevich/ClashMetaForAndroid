@@ -13,6 +13,16 @@ data class Proxy(
     val type: String,
     val delay: Int,
     var isGroup: Boolean,
+    // Fleet-status annotation, filled by cfa/native/fleet from the hourly
+    // per-node sweep. Empty/zero means "no fresh verdict" — an unknown
+    // node, a stale feed, or a nested group. Defaults keep the model
+    // decodable from a core build that predates these fields.
+    val fleetGemini: String = "",
+    val fleetGeminiDetail: String = "",
+    val fleetYoutubeGl: String = "",
+    val fleetExitIp: String = "",
+    val fleetReachable: Boolean = false,
+    val fleetCheckedAt: Long = 0,
 ) : Parcelable {
     override fun writeToParcel(parcel: Parcel, flags: Int) {
         Parcelizer.encodeToParcel(serializer(), parcel, this)

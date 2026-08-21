@@ -11,6 +11,7 @@ import com.github.kr328.clash.design.util.applyFrom
 import com.github.kr328.clash.design.util.bindAppBarElevation
 import com.github.kr328.clash.design.util.layoutInflater
 import com.github.kr328.clash.design.util.root
+import com.github.kr328.clash.service.fleet.FleetStatus
 import com.github.kr328.clash.service.model.AccessControlMode
 import com.github.kr328.clash.service.store.ServiceStore
 import kotlinx.coroutines.launch
@@ -27,6 +28,17 @@ class NetworkSettingsDesign(
 
     private val binding = DesignSettingsCommonBinding
         .inflate(context.layoutInflater, context.root, false)
+
+    /**
+     * The stored URL is a plain (non-null) string: empty means "use the
+     * one baked in at build time", which is also what the dialog's Reset
+     * button (text = null) must produce.
+     */
+    private val fleetUrlAdapter = object : NullableTextAdapter<String> {
+        override fun from(value: String): String = value
+
+        override fun to(text: String?): String = text?.trim() ?: ""
+    }
 
     override val root: View
         get() = binding.root
@@ -127,6 +139,42 @@ class NetworkSettingsDesign(
             ) {
                 clicked {
                     requests.trySend(Request.StartAccessControlList)
+                }
+            }
+
+            // Fleet status: the hourly per-node Gemini/YouTube sweep that
+            // drives the proxy-list badges and the geo-split buckets.
+            // Deliberately outside vpnDependencies — these two are not VPN
+            // options and stay usable while the service runs.
+            category(R.string.fleet_status)
+
+            editableText(
+                value = srvStore::fleetStatusUrl,
+                adapter = fleetUrlAdapter,
+                title = R.string.fleet_status_url,
+                placeholder = R.string.fleet_status_url_placeholder,
+                empty = R.string.fleet_status_url_empty,
+            )
+
+            clickable(
+                title = R.string.fleet_refresh_now,
+                summary = R.string.fleet_refresh_now_summary,
+            ) {
+                clicked {
+                    this@NetworkSettingsDesign.launch {
+                        val result = FleetStatus.refresh(context)
+
+                        showToast(
+                            when (result) {
+                                FleetStatus.Result.Updated -> R.string.fleet_refresh_updated
+                                // minAge is 0 here, so the only way to be
+                                // skipped is having no URL at all
+                                FleetStatus.Result.Skipped -> R.string.fleet_refresh_not_configured
+                                FleetStatus.Result.Failed -> R.string.fleet_refresh_failed
+                            },
+                            ToastDuration.Long,
+                        )
+                    }
                 }
             }
 

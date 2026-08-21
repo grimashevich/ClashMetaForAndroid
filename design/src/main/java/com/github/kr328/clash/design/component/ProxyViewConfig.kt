@@ -37,4 +37,30 @@ class ProxyViewConfig(val context: Context, var proxyLine: Int) {
 
     val cardRadius = context.getPixels(R.dimen.proxy_card_radius).toFloat()
     var cardOffset = context.getPixels(R.dimen.proxy_card_offset).toFloat()
+
+    /**
+     * Fleet badges are sized off the row's text so they stay in
+     * proportion in every layout density (1/2/3 columns).
+     */
+    val badgeSize: Float
+        get() = textSize * 1.15f
+
+    val badgeGap: Float
+        get() = textMargin
+
+    /** YouTube red / Gemini blue when the exit behaves as foreign. */
+    val youtubeBadgeColor = 0xFFFF0000.toInt()
+    val geminiBadgeColor = 0xFF4285F4.toInt()
+
+    /**
+     * A Russian-looking exit keeps the shape but loses the colour. Built
+     * from the row's own control colour so it stays legible on both the
+     * selected and unselected background, in light and dark themes.
+     */
+    fun mutedBadgeColor(control: Int): Int = Color.argb(
+        0x66,
+        Color.red(control),
+        Color.green(control),
+        Color.blue(control),
+    )
 }

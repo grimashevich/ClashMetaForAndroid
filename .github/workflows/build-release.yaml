@@ -103,6 +103,22 @@ jobs:
           echo "cat signing.properties"
           cat signing.properties
 
+      # Fleet-status feed (hourly per-node Gemini/YouTube verdicts). The
+      # feed path is a shared secret, so it is injected at build time
+      # instead of being committed. Without the secret the build simply
+      # ships an empty URL and the feature stays dormant until one is
+      # entered in Settings -> Network.
+      - name: Fleet status properties
+        env:
+          FLEET_STATUS_URL: ${{ secrets.FLEET_STATUS_URL }}
+        run: |
+          if [ -n "$FLEET_STATUS_URL" ]; then
+            echo "fleet.status.url=$FLEET_STATUS_URL" >> local.properties
+            echo "fleet.status.url injected"
+          else
+            echo "FLEET_STATUS_URL secret is not set, building without a baked-in feed url"
+          fi
+
       - name: Release Build
         if: success()
         run: ./gradlew --no-daemon app:assembleMetaRelease

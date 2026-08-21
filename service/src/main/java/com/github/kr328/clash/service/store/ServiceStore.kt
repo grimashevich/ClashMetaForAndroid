@@ -77,4 +77,16 @@ class ServiceStore(context: Context) {
         key = "dynamic_notification",
         defaultValue = true
     )
+
+    /**
+     * Overrides the build-time fleet-status feed URL
+     * (`BuildConfig.FLEET_STATUS_URL`, injected from `local.properties`
+     * so the secret path never lands in git). Empty = use the built-in
+     * one. Lives here rather than in UiStore because the fetcher also
+     * runs in the service process.
+     */
+    var fleetStatusUrl by store.string(
+        key = "fleet_status_url",
+        defaultValue = ""
+    )
 }
