@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,7 +18,7 @@ func resetCache() {
 	current, lastMod, lastSize = nil, 0, 0
 	mu.Unlock()
 
-	lastStat.Store(0)
+	lastAttempt.Store(0)
 }
 
 // writeFeed points the native home dir at a temp dir and writes a feed
@@ -213,7 +214,7 @@ func TestReloadPicksUpRewrite(t *testing.T) {
 
 	// the stat is throttled, so a reader inside the window still sees
 	// the old snapshot — that is intended, not a bug
-	lastStat.Store(0)
+	lastAttempt.Store(0)
 
 	if class, country, _ := RegionOf("🇱🇹 Литва"); class != classForeign || country != "CH" {
 		t.Fatalf("after rewrite = (%q, %q), want (foreign, CH)", class, country)
@@ -226,5 +227,53 @@ func TestMissingFeedIsNotAVerdict(t *testing.T) {
 
 	if _, ok := EntryOf("🇱🇹 Литва"); ok {
 		t.Error("verdict served without a feed file")
+	}
+}
+
+// TestConcurrentColdLookups pins the startup race that shipped in the
+// first build: a burst of lookups arriving before the first load must
+// all see the snapshot, not just whichever goroutine won the throttle.
+// When they don't, geo-split treats every server as unclassified and
+// probes google.com through all of them — the exact cost this feature
+// exists to avoid.
+func TestConcurrentColdLookups(t *testing.T) {
+	now := time.Now()
+	writeFeed(t, feed(
+		node("Швейцария-tcp", "Швейцария", "available", "CH", true, now)+","+
+			node("Литва-tcp", "Литва", "blocked", "RU", true, now),
+	))
+
+	const workers = 16
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	misses := make(chan string, workers)
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+
+		go func(i int) {
+			defer wg.Done()
+
+			<-start
+
+			name := "🇨🇭 Швейцария"
+			want := classForeign
+			if i%2 == 1 {
+				name, want = "🇱🇹 Литва", classRU
+			}
+
+			if class, _, ok := RegionOf(name); !ok || class != want {
+				misses <- name
+			}
+		}(i)
+	}
+
+	close(start)
+	wg.Wait()
+	close(misses)
+
+	if n := len(misses); n > 0 {
+		t.Fatalf("%d/%d concurrent cold lookups missed the snapshot", n, workers)
 	}
 }

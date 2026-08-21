@@ -128,12 +128,24 @@ var (
 	lastMod  int64
 	lastSize int64
 
-	// unix nanos of the last stat, so the hot path skips the syscall
-	lastStat atomic.Int64
+	// serialises reload work: concurrent callers wait for the in-flight
+	// load instead of racing past it (see maybeReload)
+	loadMu sync.Mutex
+
+	// unix nanos of the end of the last load attempt, so the hot path
+	// skips the syscall — and so waiters can tell "an attempt just
+	// finished" from "an attempt is in flight"
+	lastAttempt atomic.Int64
 )
 
 func path() string {
 	return constant.Path.Resolve(FileName)
+}
+
+// lastAttemptAt reports when the last load attempt finished. Zero
+// (never attempted) reads as the epoch, which is always "due".
+func lastAttemptAt() time.Time {
+	return time.Unix(0, lastAttempt.Load())
 }
 
 // normalizeName folds a name to its matching key: letters and digits
@@ -235,14 +247,39 @@ func buildIndex(nodes map[string]rawNode) map[string]*Entry {
 // maybeReload re-parses the sidecar when it changed on disk. Cheap and
 // safe to call from hot paths: at most one stat per reloadThrottle, and
 // a parse only when mtime or size moved.
+//
+// Concurrent callers *block* on the in-flight load rather than skipping
+// it. An earlier version let them skip, which broke exactly the case
+// that matters: at startup the UI query and a geo-split classification
+// sweep hit this within microseconds of each other, one did the load and
+// every other caller saw an empty snapshot, decided "no verdict" and
+// probed google.com through each server anyway. Waiting costs one small
+// file read; skipping cost the whole point of the feature.
 func maybeReload() {
-	now := time.Now().UnixNano()
-	last := lastStat.Load()
-
-	if now-last < int64(reloadThrottle) || !lastStat.CompareAndSwap(last, now) {
+	if time.Since(lastAttemptAt()) < reloadThrottle {
 		return
 	}
 
+	loadMu.Lock()
+	defer loadMu.Unlock()
+
+	// Re-check under the lock: whoever we queued behind has *finished*
+	// an attempt by now (the timestamp is written at the end of one), so
+	// a burst of lookups costs a single stat and every waiter leaves
+	// with the snapshot the winner produced.
+	if time.Since(lastAttemptAt()) < reloadThrottle {
+		return
+	}
+
+	// stamped before the unlock, after reload() returns
+	defer lastAttempt.Store(time.Now().UnixNano())
+
+	reload()
+}
+
+// reload stats the sidecar and re-parses it when it changed. Always
+// called with loadMu held.
+func reload() {
 	info, err := os.Stat(path())
 	if err != nil {
 		if !os.IsNotExist(err) {

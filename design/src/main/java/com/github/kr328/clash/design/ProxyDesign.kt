@@ -184,6 +184,9 @@ class ProxyDesign(
                 val gemini = when (proxy.fleetGemini) {
                     "available" -> context.getString(R.string.fleet_gemini_available)
                     "blocked" -> context.getString(R.string.fleet_gemini_blocked)
+                    // the sweep itself failed on this node (timeout, TLS
+                    // error): no verdict, hence no badge either
+                    "error" -> context.getString(R.string.fleet_gemini_error)
                     else -> proxy.fleetGemini
                 }
 

@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeoutOrNull
 
 class ProxyActivity : BaseActivity<ProxyDesign>() {
     override suspend fun main() {
@@ -102,10 +103,15 @@ class ProxyActivity : BaseActivity<ProxyDesign>() {
                                 // them, so the numbers and the badges
                                 // update in the same frame.
                                 val fleet = async(Dispatchers.IO) {
-                                    FleetStatus.refresh(
-                                        this@ProxyActivity,
-                                        minAgeMillis = 60 * 1000L,
-                                    )
+                                    // bounded: a dead feed host must not
+                                    // hold the url-test spinner for the
+                                    // fetcher's full connect+read timeout
+                                    withTimeoutOrNull(10_000L) {
+                                        FleetStatus.refresh(
+                                            this@ProxyActivity,
+                                            minAgeMillis = 60 * 1000L,
+                                        )
+                                    }
                                 }
 
                                 withClash {
