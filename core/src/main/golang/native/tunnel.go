@@ -54,6 +54,8 @@ func queryGroup(name C.c_string, sortMode C.c_string) *C.char {
 		mode = tunnel.Title
 	case "Delay":
 		mode = tunnel.Delay
+	case "Fleet":
+		mode = tunnel.Fleet
 	}
 
 	response := tunnel.QueryProxyGroup(n, mode, app.SubtitlePattern())
