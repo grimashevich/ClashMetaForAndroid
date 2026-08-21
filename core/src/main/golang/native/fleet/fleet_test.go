@@ -57,12 +57,18 @@ func node(key, name, gemini, gl string, reachable bool, checkedAt time.Time) str
 // row was refreshed, and when the Gemini verdict inside it was actually
 // obtained.
 func nodeAt(key, name, gemini, gl string, reachable bool, checkedAt, geminiCheckedAt time.Time) string {
+	return nodeAtBoth(key, name, gemini, gl, reachable, checkedAt, geminiCheckedAt, checkedAt)
+}
+
+// nodeAtBoth additionally backdates the YouTube attribution, which the
+// feed keeps just as sticky as the Gemini verdict.
+func nodeAtBoth(key, name, gemini, gl string, reachable bool, checkedAt, geminiCheckedAt, youtubeCheckedAt time.Time) string {
 	return fmt.Sprintf(
 		`%q:{"proxy":%q,"name":%q,"exit_ip":"203.0.113.7","youtube_gl":%q,`+
 			`"youtube_gl_fresh":true,"youtube_gl_checked_at":%d,`+
 			`"gemini":%q,"gemini_fresh":%t,"gemini_checked_at":%d,"gemini_age_seconds":%d,`+
 			`"gemini_probe":"ok","gemini_detail":%q,"measured":true,"reachable":%t,"checked_at":%d}`,
-		key, key, name, gl, checkedAt.Unix(),
+		key, key, name, gl, youtubeCheckedAt.Unix(),
 		gemini, geminiCheckedAt.Equal(checkedAt), geminiCheckedAt.Unix(),
 		int64(checkedAt.Sub(geminiCheckedAt).Seconds()),
 		"detail for "+name, reachable, checkedAt.Unix(),
@@ -267,6 +273,31 @@ func TestStaleGeminiVerdictReadsUnknown(t *testing.T) {
 	}
 	if _, _, verdict := RegionOf("🇱🇹 Литва"); verdict {
 		t.Error("expired verdict still classified the node")
+	}
+}
+
+// The country attribution expires on the same six-hour rule, and on its
+// own clock: it labels the exit, so a badge must not claim a country
+// nobody has measured lately. It decides nothing about routing.
+func TestStaleYoutubeAttributionDrops(t *testing.T) {
+	now := time.Now()
+	writeFeed(t, feed(nodeAtBoth("Литва-tcp", "Литва", "blocked", "RU", true,
+		now, now, now.Add(-FreshMaxAge-time.Minute))))
+
+	entry, ok := EntryOf("🇱🇹 Литва")
+	if !ok {
+		t.Fatal("row was dropped; want it served without the country")
+	}
+	if entry.YoutubeGL != "" {
+		t.Errorf("YoutubeGL = %q, want it cleared", entry.YoutubeGL)
+	}
+
+	class, country, verdict := RegionOf("🇱🇹 Литва")
+	if !verdict || class != classRU {
+		t.Errorf("RegionOf = (%q, %v), want (ru, true): the Gemini verdict is unaffected", class, verdict)
+	}
+	if country != "" {
+		t.Errorf("country = %q, want empty", country)
 	}
 }
 

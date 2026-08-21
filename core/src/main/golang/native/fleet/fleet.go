@@ -111,6 +111,11 @@ type Entry struct {
 	// means the feed did not report it (schema 1) and CheckedAt stands
 	// in.
 	GeminiCheckedAt int64
+
+	// YoutubeCheckedAt is the same idea for the YouTube attribution,
+	// which the feed keeps just as sticky (youtube_gl_fresh /
+	// youtube_gl_checked_at mirror the Gemini pair).
+	YoutubeCheckedAt int64
 }
 
 // freshAt applies the one freshness rule used everywhere. A timestamp
@@ -142,16 +147,29 @@ func (e Entry) geminiFresh(now time.Time) bool {
 	return freshAt(e.CheckedAt, now)
 }
 
+// youtubeFresh applies the same rule to the country attribution. It
+// decides nothing about routing — only whether the badge and the detail
+// line may claim a country.
+func (e Entry) youtubeFresh(now time.Time) bool {
+	if e.YoutubeCheckedAt > 0 {
+		return freshAt(e.YoutubeCheckedAt, now)
+	}
+
+	return freshAt(e.CheckedAt, now)
+}
+
 // rawNode mirrors only the fields acted on. The feed also carries
 // gemini_fresh (was it re-measured in the last run) and
 // gemini_age_seconds (the producer's own view of the age) — both are
 // derivable from gemini_checked_at, which is the one we trust because
 // it is comparable against our own clock.
 type rawNode struct {
-	Proxy           string  `json:"proxy"`
-	Name            string  `json:"name"`
-	ExitIP          string  `json:"exit_ip"`
-	YoutubeGL       string  `json:"youtube_gl"`
+	Proxy            string `json:"proxy"`
+	Name             string `json:"name"`
+	ExitIP           string `json:"exit_ip"`
+	YoutubeGL        string `json:"youtube_gl"`
+	YoutubeCheckedAt int64  `json:"youtube_gl_checked_at"`
+
 	Gemini          string  `json:"gemini"`
 	GeminiDetail    *string `json:"gemini_detail"`
 	GeminiCheckedAt int64   `json:"gemini_checked_at"`
@@ -281,15 +299,16 @@ func buildIndex(nodes map[string]rawNode) map[string]*Entry {
 		}
 
 		entry := &Entry{
-			Proxy:           node.Proxy,
-			Name:            node.Name,
-			ExitIP:          node.ExitIP,
-			YoutubeGL:       strings.ToUpper(node.YoutubeGL),
-			Gemini:          normalizeGemini(node.Gemini),
-			GeminiDetail:    detail,
-			GeminiCheckedAt: node.GeminiCheckedAt,
-			Reachable:       node.Reachable,
-			CheckedAt:       node.CheckedAt,
+			Proxy:            node.Proxy,
+			Name:             node.Name,
+			ExitIP:           node.ExitIP,
+			YoutubeGL:        strings.ToUpper(node.YoutubeGL),
+			YoutubeCheckedAt: node.YoutubeCheckedAt,
+			Gemini:           normalizeGemini(node.Gemini),
+			GeminiDetail:     detail,
+			GeminiCheckedAt:  node.GeminiCheckedAt,
+			Reachable:        node.Reachable,
+			CheckedAt:        node.CheckedAt,
 		}
 
 		for _, name := range []string{key, node.Proxy, node.Name} {
@@ -457,6 +476,10 @@ func EntryOf(proxyName string) (Entry, bool) {
 		// refusal it explains.
 		entry.Gemini = geminiUnknown
 		entry.GeminiDetail = ""
+	}
+
+	if entry.YoutubeGL != "" && !entry.youtubeFresh(now) {
+		entry.YoutubeGL = ""
 	}
 
 	return entry, true
