@@ -76,8 +76,24 @@ subprojects {
             minSdk = 21
             targetSdk = 35
 
-            versionName = "2.11.33"
-            versionCode = 211033
+            // Upstream release we are synced to, plus this fork's own
+            // build revision. Bump forkRevision by 1 for every APK handed
+            // over for testing, and reset it to 1 on the next upstream
+            // sync (which moves upstreamVersionName/Code instead). See
+            // "Версии сборок форка" in CLAUDE.md.
+            //
+            // versionCode multiplies the upstream code rather than adding
+            // to it, so our revisions can never collide with a future
+            // upstream release: 2.11.33-7 is 21103307, still below
+            // 2.11.34's 21103400. Adding +1 to 211033 would have made our
+            // seventh build outrank upstream's next one and turned that
+            // sync into an un-installable downgrade.
+            val upstreamVersionName = "2.11.33"
+            val upstreamVersionCode = 211033
+            val forkRevision = 1
+
+            versionName = "$upstreamVersionName-$forkRevision"
+            versionCode = upstreamVersionCode * 100 + forkRevision
 
             resValue("string", "release_name", "v$versionName")
             resValue("integer", "release_code", "$versionCode")

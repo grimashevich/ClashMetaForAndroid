@@ -16,7 +16,11 @@ import (
 // template defines. See docs/balancers_design.md in the outer
 // vpn-leak-testing repo for the full design.
 const (
-	customGroupStrategy     = "🎛 Стратегия"
+	customGroupStrategy = "🎛 Стратегия"
+	// Same manual ranking as customGroupPriority, but it skips servers
+	// where the hourly sweep says Gemini does not answer. ✨ is the glyph
+	// the UI already uses for the Gemini badge.
+	customGroupGemini       = "✨ Gemini по приоритету"
 	customGroupPriority     = "⚡ Приоритет"
 	customGroupRUFirst      = "🇷🇺 Сначала RU"
 	customGroupForeignFirst = "🌍 Сначала зарубежные"
@@ -181,10 +185,15 @@ func matchRuleTarget(rules []string) (int, string) {
 // patchCustomGroups injects the custom balancer groups over the loaded
 // profile:
 //
+//   - "🎛 Стратегия"          selector choosing between the below
+//   - "✨ Gemini по приоритету" priority order, first server where the
+//     hourly sweep confirms Gemini answers
 //   - "⚡ Приоритет"          fallback ordered by user-assigned priorities
 //   - "🇷🇺 Сначала RU"        geo-split preferring Google-RU servers
 //   - "🌍 Сначала зарубежные" geo-split preferring non-RU servers
-//   - "🎛 Стратегия"          selector choosing between the above
+//
+// They are injected in that order, which is also the tab order in the
+// app.
 //
 // The MATCH rule (or a new one, when the profile has no rules) is
 // pointed at the strategy selector. The selector's first entry is the
@@ -219,7 +228,7 @@ func patchCustomGroups(cfg *config.RawConfig, _ string) error {
 			existing[name] = true
 		}
 	}
-	for _, name := range []string{customGroupStrategy, customGroupPriority, customGroupRUFirst, customGroupForeignFirst} {
+	for _, name := range []string{customGroupStrategy, customGroupGemini, customGroupPriority, customGroupRUFirst, customGroupForeignFirst} {
 		if existing[name] {
 			// The profile already defines one of our names. Re-injecting
 			// would make mihomo fail the whole load on the duplicate, so
@@ -234,7 +243,10 @@ func patchCustomGroups(cfg *config.RawConfig, _ string) error {
 		matchTarget = "DIRECT"
 	}
 
-	strategyChoices := []string{matchTarget, customGroupPriority, customGroupRUFirst, customGroupForeignFirst}
+	// matchTarget stays first so the selector's default keeps routing
+	// exactly where the profile routed it before injection; the new modes
+	// follow in the same order as the tabs.
+	strategyChoices := []string{matchTarget, customGroupGemini, customGroupPriority, customGroupRUFirst, customGroupForeignFirst}
 	// Existing top-level groups (e.g. the subscription's url-test) stay
 	// selectable as strategies too, unless one of them already is the
 	// MATCH target (then it's already first in the list).
@@ -244,6 +256,14 @@ func patchCustomGroups(cfg *config.RawConfig, _ string) error {
 		}
 	}
 
+	// Read once: both priority-ordered groups must agree on the ranking,
+	// and re-reading would let a concurrent save split them.
+	prioritized := orderByPriority(servers, readPriorities())
+
+	// Order here is the tab order in the app. The strategy selector comes
+	// first because it is the control panel — it decides which of the
+	// others actually routes traffic — and the modes follow it in the
+	// order they are offered inside it.
 	injected := []map[string]any{
 		{
 			"name":    customGroupStrategy,
@@ -251,9 +271,14 @@ func patchCustomGroups(cfg *config.RawConfig, _ string) error {
 			"proxies": strategyChoices,
 		},
 		{
+			"name":    customGroupGemini,
+			"type":    "gemini-priority",
+			"proxies": prioritized,
+		},
+		{
 			"name":    customGroupPriority,
 			"type":    "fallback",
-			"proxies": orderByPriority(servers, readPriorities()),
+			"proxies": prioritized,
 		},
 		{
 			"name":    customGroupRUFirst,
