@@ -42,6 +42,7 @@ class NetworkBridgeService : VpnService(), CoroutineScope by CoroutineScope(Disp
         install(AppListCacheModule(self))
         install(TimeZoneModule(self))
         install(SuspendModule(self))
+        install(FleetStatusModule(self))
 
         try {
             tun.open()

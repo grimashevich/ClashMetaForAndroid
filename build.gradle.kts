@@ -55,6 +55,19 @@ subprojects {
                 applicationId = customApplicationId.takeIf { it?.isNotBlank() == true } ?: "com.wx3y.vpn.client"
             }
 
+            // Fleet-status feed (hourly per-node Gemini/YouTube verdicts).
+            // Its path is an unguessable shared secret, so it is injected
+            // from local.properties instead of being committed to a public
+            // fork. Empty simply leaves the feature dormant until a URL is
+            // set in Settings -> Network. See docs/fleet_status.md in the
+            // outer vpn-leak-testing repo.
+            val fleetStatusUrl = (queryConfigProperty("fleet.status.url") as? String)
+                ?.trim()
+                ?.replace("\\", "\\\\")
+                ?.replace("\"", "\\\"")
+                .orEmpty()
+            buildConfigField("String", "FLEET_STATUS_URL", "\"$fleetStatusUrl\"")
+
             project.name.let { name ->
                 namespace = if (name == "app") "com.github.kr328.clash"
                 else "com.github.kr328.clash.$name"
@@ -63,8 +76,8 @@ subprojects {
             minSdk = 21
             targetSdk = 35
 
-            versionName = "2.11.30"
-            versionCode = 211030
+            versionName = "2.11.32"
+            versionCode = 211032
 
             resValue("string", "release_name", "v$versionName")
             resValue("integer", "release_code", "$versionCode")

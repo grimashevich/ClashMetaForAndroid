@@ -133,10 +133,24 @@ class ProxyView(
 
         val delayWidth = state.rect.width()
 
+        // Fleet badges stack *under* the delay number rather than beside
+        // it: the right-hand column then costs max(delay, badges) instead
+        // of their sum, which is what keeps server names from being
+        // truncated to "Швейц" in the two- and three-column layouts.
+        val badgeSize = state.config.badgeSize
+        val badgeGap = state.config.badgeGap
+        val badgeCount = (if (state.youtubeBadge != FleetBadge.None) 1 else 0) +
+                (if (state.geminiBadge != FleetBadge.None) 1 else 0)
+        val badgesWidth = if (badgeCount == 0) {
+            0f
+        } else {
+            badgeCount * badgeSize + (badgeCount - 1) * badgeGap
+        }
+
         val mainTextWidth = (width -
                 state.config.layoutPadding * 2 -
                 state.config.contentPadding * 2 -
-                delayWidth -
+                delayWidth.toFloat().coerceAtLeast(badgesWidth) -
                 state.config.textMargin * 2
                 )
             .coerceAtLeast(0f)
@@ -166,10 +180,17 @@ class ProxyView(
         paint.isAntiAlias = true
         paint.color = state.controls
 
-        // draw delay
+        // draw delay — on the title line when badges share the column,
+        // vertically centred otherwise (the layout without fleet data is
+        // exactly what it was before badges existed)
         canvas.apply {
             val x = width - state.config.layoutPadding - state.config.contentPadding - delayWidth
-            val y = height / 2f - textOffset
+            val y = if (badgeCount == 0) {
+                height / 2f - textOffset
+            } else {
+                state.config.layoutPadding +
+                        (height - state.config.layoutPadding * 2) / 3f - textOffset
+            }
 
             drawText(state.delayText, 0, delayCount, x, y, paint)
         }
@@ -191,5 +212,121 @@ class ProxyView(
 
             drawText(state.subtitle, 0, subtitleCount, x, y, paint)
         }
+
+        // draw fleet badges (last: they reset the shared paint), on the
+        // subtitle line, right-aligned under the delay number
+        if (badgeCount > 0) {
+            // the subtitle line's optical centre: the text baselines are
+            // offset from it by textOffset, a glyph is centred on it
+            val centerY = state.config.layoutPadding +
+                    (height - state.config.layoutPadding * 2) / 3f * 2
+            var right = width - state.config.layoutPadding - state.config.contentPadding
+
+            if (state.geminiBadge != FleetBadge.None) {
+                drawGeminiBadge(canvas, paint, state, right - badgeSize, centerY, badgeSize)
+
+                right -= badgeSize + badgeGap
+            }
+
+            if (state.youtubeBadge != FleetBadge.None) {
+                drawYoutubeBadge(canvas, paint, state, right - badgeSize, centerY, badgeSize)
+            }
+        }
+    }
+
+    /**
+     * Coloured for an exit that behaves as foreign, muted grey for one
+     * Google treats as Russian — the single rule behind both glyphs.
+     */
+    private fun badgeColor(state: ProxyViewState, badge: FleetBadge, brand: Int): Int {
+        return if (badge == FleetBadge.Foreign) brand else state.config.mutedBadgeColor(state.controls)
+    }
+
+    /**
+     * YouTube: a play triangle in an outlined rounded rectangle. Drawn as
+     * an outline rather than a filled plate with a punched-out triangle
+     * because the single-line layout leaves the row background
+     * transparent, and a "cut-out" in a transparent row draws nothing.
+     */
+    private fun drawYoutubeBadge(
+        canvas: Canvas,
+        paint: Paint,
+        state: ProxyViewState,
+        left: Float,
+        centerY: Float,
+        size: Float,
+    ) {
+        val plateHeight = size * 0.74f
+        val top = centerY - plateHeight / 2f
+        val stroke = (size * 0.11f).coerceAtLeast(1f)
+        val path = state.badgePath
+        val color = badgeColor(state, state.youtubeBadge, state.config.youtubeBadgeColor)
+
+        paint.reset()
+        paint.isAntiAlias = true
+        paint.color = color
+
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = stroke
+
+        path.reset()
+        path.addRoundRect(
+            left + stroke / 2f,
+            top + stroke / 2f,
+            left + size - stroke / 2f,
+            top + plateHeight - stroke / 2f,
+            plateHeight * 0.3f,
+            plateHeight * 0.3f,
+            Path.Direction.CW,
+        )
+
+        canvas.drawPath(path, paint)
+
+        paint.style = Paint.Style.FILL
+
+        val triangleHeight = plateHeight * 0.44f
+        val triangleWidth = triangleHeight * 0.9f
+        val triangleLeft = left + size / 2f - triangleWidth / 2f
+
+        path.reset()
+        path.moveTo(triangleLeft, centerY - triangleHeight / 2f)
+        path.lineTo(triangleLeft + triangleWidth, centerY)
+        path.lineTo(triangleLeft, centerY + triangleHeight / 2f)
+        path.close()
+
+        canvas.drawPath(path, paint)
+    }
+
+    /**
+     * Gemini: the four-point sparkle. Each side is a quadratic whose
+     * control point is the centre, which is what pulls the edges inward
+     * into a star instead of leaving a diamond.
+     */
+    private fun drawGeminiBadge(
+        canvas: Canvas,
+        paint: Paint,
+        state: ProxyViewState,
+        left: Float,
+        centerY: Float,
+        size: Float,
+    ) {
+        val radius = size / 2f
+        val centerX = left + radius
+        val path = state.badgePath
+
+        paint.reset()
+        paint.isAntiAlias = true
+        paint.style = Paint.Style.FILL
+        paint.color = badgeColor(state, state.geminiBadge, state.config.geminiBadgeColor)
+
+        path.reset()
+        path.moveTo(centerX, centerY - radius)
+        path.quadTo(centerX, centerY, centerX + radius, centerY)
+        path.quadTo(centerX, centerY, centerX, centerY + radius)
+        path.quadTo(centerX, centerY, centerX - radius, centerY)
+        path.quadTo(centerX, centerY, centerX, centerY - radius)
+        path.close()
+
+        canvas.drawPath(path, paint)
     }
 }

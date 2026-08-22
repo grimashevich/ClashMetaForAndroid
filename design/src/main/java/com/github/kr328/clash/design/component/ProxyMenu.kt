@@ -70,6 +70,11 @@ class ProxyMenu(
 
                 requests.trySend(ProxyDesign.Request.ReloadAll)
             }
+            R.id.fleet -> {
+                uiStore.proxySort = ProxySort.Fleet
+
+                requests.trySend(ProxyDesign.Request.ReloadAll)
+            }
             R.id.dont_modify -> {
                 requests.trySend(ProxyDesign.Request.PatchMode(null))
             }
@@ -104,6 +109,7 @@ class ProxyMenu(
                 ProxySort.Default -> findItem(R.id.default_).isChecked = true
                 ProxySort.Title -> findItem(R.id.name).isChecked = true
                 ProxySort.Delay -> findItem(R.id.delay).isChecked = true
+                ProxySort.Fleet -> findItem(R.id.fleet).isChecked = true
             }
 
             when (mode) {

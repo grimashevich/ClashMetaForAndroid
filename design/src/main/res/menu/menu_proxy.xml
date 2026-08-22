@@ -54,6 +54,9 @@
                 <item
                     android:id="@+id/delay"
                     android:title="@string/delay" />
+                <item
+                    android:id="@+id/fleet"
+                    android:title="@string/fleet_sort" />
             </group>
         </menu>
     </item>

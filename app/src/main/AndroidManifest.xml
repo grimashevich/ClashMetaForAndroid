@@ -161,6 +161,11 @@
             android:exported="false"
             android:label="@string/override" />
         <activity
+            android:name=".ServerPrioritiesActivity"
+            android:configChanges="uiMode"
+            android:exported="false"
+            android:label="@string/server_priorities" />
+        <activity
             android:name=".MetaFeatureSettingsActivity"
             android:configChanges="uiMode"
             android:exported="false"
