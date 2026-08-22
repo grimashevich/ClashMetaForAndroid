@@ -48,9 +48,36 @@ class ServerPrioritiesDesign(
         }
     }
 
+    /**
+     * Applies fleet verdicts onto the rows already on screen, keyed by
+     * server name.
+     *
+     * Two things this must not do, both learned from review round 1:
+     * it must not replace the list (that is `notifyDataSetChanged`, which
+     * desyncs an in-flight drag), and it must not touch the rows while a
+     * drag is running at all — rebinding the row under the finger visibly
+     * resets it. So the update is applied in place, leaving order and
+     * size untouched, and is held back until the drag settles.
+     */
+    suspend fun applyBadges(byName: Map<String, ServerPriorityEntry>) {
+        withContext(Dispatchers.Main) {
+            if (dragging) {
+                pendingBadges = byName
+            } else {
+                adapter.applyBadges(byName)
+            }
+        }
+    }
+
     fun requestReset() {
         requests.trySend(Request.Reset)
     }
+
+    /** True between a drag starting and its drop animation being cleared. */
+    private var dragging = false
+
+    /** Set when badges arrived mid-drag; applied once the drag settles. */
+    private var pendingBadges: Map<String, ServerPriorityEntry>? = null
 
     private val touchHelper = ItemTouchHelper(object : ItemTouchHelper.Callback() {
         /**
@@ -78,16 +105,10 @@ class ServerPrioritiesDesign(
             viewHolder: RecyclerView.ViewHolder,
             target: RecyclerView.ViewHolder,
         ): Boolean {
-            val moved = adapter.move(
+            return adapter.move(
                 viewHolder.bindingAdapterPosition,
                 target.bindingAdapterPosition,
             )
-
-            if (moved) {
-                reordered = true
-            }
-
-            return moved
         }
 
         override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) = Unit
@@ -99,6 +120,8 @@ class ServerPrioritiesDesign(
             super.onSelectedChanged(viewHolder, actionState)
 
             if (actionState == ItemTouchHelper.ACTION_STATE_DRAG) {
+                dragging = true
+                dragStartIndex = viewHolder?.bindingAdapterPosition ?: RecyclerView.NO_POSITION
                 viewHolder?.itemView?.isPressed = true
             }
         }
@@ -107,25 +130,42 @@ class ServerPrioritiesDesign(
             super.clearView(recyclerView, viewHolder)
 
             viewHolder.itemView.isPressed = false
+            dragging = false
 
-            // A drag that ended where it started still lands here, and so
-            // does a long-press the user aborted. Report only when a row
-            // actually changed rank, so a stray press cannot trigger a
-            // save and a config reload.
-            if (reordered) {
-                reordered = false
+            // Compare where the row started with where it ended, rather
+            // than trusting "onMove fired at least once": dragging a row
+            // down and back up before letting go fires onMove twice and
+            // lands on the original order. Saving that would rewrite
+            // priorities.json and trigger a config reload for nothing.
+            val landed = viewHolder.bindingAdapterPosition
+            val moved = dragStartIndex != RecyclerView.NO_POSITION &&
+                    landed != RecyclerView.NO_POSITION &&
+                    landed != dragStartIndex
 
-                // Posted: RecyclerView is still finishing the drop
-                // animation here, and notifying inside clearView throws
-                // "Cannot call this method while RecyclerView is
-                // computing a layout or scrolling".
-                recyclerView.post { adapter.refreshRanks() }
+            dragStartIndex = RecyclerView.NO_POSITION
 
+            // Posted: RecyclerView is still finishing the drop animation
+            // here, and notifying inside clearView throws "Cannot call
+            // this method while RecyclerView is computing a layout or
+            // scrolling".
+            recyclerView.post {
+                if (moved) {
+                    adapter.refreshRanks()
+                }
+
+                pendingBadges?.let {
+                    pendingBadges = null
+
+                    adapter.applyBadges(it)
+                }
+            }
+
+            if (moved) {
                 requests.trySend(Request.OrderChanged)
             }
         }
 
-        private var reordered = false
+        private var dragStartIndex = RecyclerView.NO_POSITION
     })
 
     init {

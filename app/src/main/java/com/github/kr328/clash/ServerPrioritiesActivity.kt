@@ -120,9 +120,10 @@ class ServerPrioritiesActivity : BaseActivity<ServerPrioritiesDesign>() {
      * With the core stopped the query yields nothing and the rows keep no
      * badges — the same thing "no verdict" looks like everywhere else.
      *
-     * The current order is read back from the design rather than reusing
-     * the list passed in, so a drag that happened while this was in
-     * flight is not undone.
+     * Handed to the design as a name-keyed overlay rather than as a new
+     * list: replacing the list mid-drag desyncs the ItemTouchHelper
+     * (review round 1, CRITICAL), so the design applies these in place
+     * and holds them back while a drag is running.
      */
     private suspend fun applyBadges(design: ServerPrioritiesDesign) {
         val verdicts = runCatching {
@@ -133,14 +134,18 @@ class ServerPrioritiesActivity : BaseActivity<ServerPrioritiesDesign>() {
 
         if (verdicts.isEmpty()) return
 
-        val updated = design.entries.map { entry ->
-            val proxy = verdicts[entry.name] ?: return@map entry
+        val updated = design.entries.mapNotNull { entry ->
+            val proxy = verdicts[entry.name] ?: return@mapNotNull null
 
-            // Same rule as ProxyViewState: a verdict counts only when the
-            // prober reached the node, "unknown" is the absence of an
-            // answer rather than a Russian verdict, and YouTube's
-            // attribution is a separate signal from Gemini's.
-            val hasVerdict = proxy.fleetReachable && proxy.fleetCheckedAt > 0
+            // Same rule as ProxyViewState, character for character: a
+            // verdict counts only for a real server the prober reached,
+            // "unknown" is the absence of an answer rather than a Russian
+            // verdict, and YouTube's attribution is a separate signal from
+            // Gemini's. The isGroup guard is defensive — the injected
+            // group only ever holds plain proxies — but the two screens
+            // disagreeing about one server is the bug this whole mapping
+            // exists to avoid, so the condition is kept literally identical.
+            val hasVerdict = !proxy.isGroup && proxy.fleetReachable && proxy.fleetCheckedAt > 0
 
             entry.copy(
                 gemini = when {
@@ -157,7 +162,7 @@ class ServerPrioritiesActivity : BaseActivity<ServerPrioritiesDesign>() {
             )
         }
 
-        design.replaceAll(updated)
+        design.applyBadges(updated.associateBy { it.name })
     }
 
     companion object {

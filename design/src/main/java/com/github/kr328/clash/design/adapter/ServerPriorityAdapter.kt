@@ -86,6 +86,32 @@ class ServerPriorityAdapter(
         notifyItemRangeChanged(0, itemCount)
     }
 
+    /**
+     * Overlays fleet verdicts onto the rows in place, keyed by name.
+     *
+     * Deliberately not a list replacement: order and size stay exactly as
+     * they are, so an ItemTouchHelper drag (or its drop animation) cannot
+     * be desynced by this. Names the map does not cover keep whatever
+     * badges they had.
+     */
+    fun applyBadges(byName: Map<String, ServerPriorityEntry>) {
+        var changed = false
+
+        for (i in entries.indices) {
+            val entry = entries[i]
+            val source = byName[entry.name] ?: continue
+
+            if (source.gemini != entry.gemini || source.youtube != entry.youtube) {
+                entries[i] = entry.copy(gemini = source.gemini, youtube = source.youtube)
+                changed = true
+            }
+        }
+
+        if (changed) {
+            notifyItemRangeChanged(0, itemCount)
+        }
+    }
+
     /** Replaces the whole list, e.g. after "reset to subscription order". */
     fun replaceAll(newEntries: List<ServerPriorityEntry>) {
         entries.clear()
