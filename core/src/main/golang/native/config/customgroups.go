@@ -185,12 +185,15 @@ func matchRuleTarget(rules []string) (int, string) {
 // patchCustomGroups injects the custom balancer groups over the loaded
 // profile:
 //
+//   - "🎛 Стратегия"          selector choosing between the below
 //   - "✨ Gemini по приоритету" priority order, first server where the
 //     hourly sweep confirms Gemini answers
 //   - "⚡ Приоритет"          fallback ordered by user-assigned priorities
 //   - "🇷🇺 Сначала RU"        geo-split preferring Google-RU servers
 //   - "🌍 Сначала зарубежные" geo-split preferring non-RU servers
-//   - "🎛 Стратегия"          selector choosing between the above
+//
+// They are injected in that order, which is also the tab order in the
+// app.
 //
 // The MATCH rule (or a new one, when the profile has no rules) is
 // pointed at the strategy selector. The selector's first entry is the
@@ -257,16 +260,20 @@ func patchCustomGroups(cfg *config.RawConfig, _ string) error {
 	// and re-reading would let a concurrent save split them.
 	prioritized := orderByPriority(servers, readPriorities())
 
+	// Order here is the tab order in the app. The strategy selector comes
+	// first because it is the control panel — it decides which of the
+	// others actually routes traffic — and the modes follow it in the
+	// order they are offered inside it.
 	injected := []map[string]any{
-		{
-			"name":    customGroupGemini,
-			"type":    "gemini-priority",
-			"proxies": prioritized,
-		},
 		{
 			"name":    customGroupStrategy,
 			"type":    "select",
 			"proxies": strategyChoices,
+		},
+		{
+			"name":    customGroupGemini,
+			"type":    "gemini-priority",
+			"proxies": prioritized,
 		},
 		{
 			"name":    customGroupPriority,
