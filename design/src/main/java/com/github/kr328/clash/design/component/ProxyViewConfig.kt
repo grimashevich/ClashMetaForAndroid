@@ -48,19 +48,13 @@ class ProxyViewConfig(val context: Context, var proxyLine: Int) {
     val badgeGap: Float
         get() = textMargin
 
-    /** YouTube red / Gemini blue when the exit behaves as foreign. */
-    val youtubeBadgeColor = 0xFFFF0000.toInt()
-    val geminiBadgeColor = 0xFF4285F4.toInt()
-
     /**
-     * A Russian-looking exit keeps the shape but loses the colour. Built
-     * from the row's own control colour so it stays legible on both the
-     * selected and unselected background, in light and dark themes.
+     * Delegated to [FleetBadges] so the proxy list and the
+     * server-priorities list cannot drift apart: same shapes, same
+     * palette, one definition.
      */
-    fun mutedBadgeColor(control: Int): Int = Color.argb(
-        0x66,
-        Color.red(control),
-        Color.green(control),
-        Color.blue(control),
-    )
+    val youtubeBadgeColor = FleetBadges.YOUTUBE_COLOR
+    val geminiBadgeColor = FleetBadges.GEMINI_COLOR
+
+    fun mutedBadgeColor(control: Int): Int = FleetBadges.mutedColor(control)
 }

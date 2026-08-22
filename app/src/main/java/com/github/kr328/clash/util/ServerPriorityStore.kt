@@ -45,6 +45,45 @@ object ServerPriorityStore {
     }
 
     /**
+     * Orders servers the way the Go side will, so the screen shows the
+     * order that is actually in force rather than a UI-side guess.
+     *
+     * Mirrors orderByPriority in
+     * core/src/main/golang/native/config/customgroups.go: assigned
+     * priorities ascending first, then everything unassigned in
+     * subscription order. **Keep the two in step.**
+     *
+     * Since the drag UI assigns every server a rank, the unassigned
+     * branch only matters for a priorities.json written by the older
+     * numeric-entry screen — [saveOrder] normalises that away the first
+     * time the user reorders.
+     */
+    fun orderServers(servers: List<String>, priorities: Map<String, Int>): List<String> {
+        return servers.withIndex().sortedWith(
+            compareBy(
+                { (_, name) -> if (priorities.containsKey(name)) 0 else 1 },
+                { (_, name) -> priorities[name] ?: 0 },
+                { (index, _) -> index },
+            )
+        ).map { (_, name) -> name }
+    }
+
+    /**
+     * Persists an explicit top-to-bottom order as ranks 1..N.
+     *
+     * Ranks are dense and start at 1 so the numbers the user sees in the
+     * list are the numbers on disk; the Go side only compares them, so
+     * any increasing sequence would do, but a gap-free one keeps the file
+     * readable when debugging.
+     */
+    fun saveOrder(context: Context, orderedNames: List<String>): Boolean {
+        return savePriorities(
+            context,
+            orderedNames.withIndex().associate { (index, name) -> name to index + 1 },
+        )
+    }
+
+    /**
      * Persists the priority map. Returns true on success. Wrapped in
      * runCatching so a write failure (out of storage, permissions) degrades
      * gracefully instead of throwing out of the caller's IO coroutine and

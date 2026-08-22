@@ -1,45 +1,74 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layout xmlns:android="http://schemas.android.com/apk/res/android">
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
     <data>
+        <variable
+            name="position"
+            type="String" />
         <variable
             name="serverName"
             type="String" />
-        <variable
-            name="priorityText"
-            type="String" />
-        <variable
-            name="edit"
-            type="android.view.View.OnClickListener" />
     </data>
 
-    <RelativeLayout
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="?attr/selectableItemBackground"
-        android:clickable="true"
-        android:focusable="true"
+        android:gravity="center_vertical"
         android:minHeight="@dimen/item_min_height"
-        android:onClick="@{edit}"
+        android:orientation="horizontal"
         android:paddingStart="@dimen/item_header_margin"
         android:paddingEnd="@dimen/item_header_margin">
 
+        <!--
+            The rank is shown as well as the order because the order alone
+            is only readable while the whole list is on screen; with more
+            servers than fit, "is this one 3rd or 9th?" needs a number.
+        -->
         <TextView
-            android:layout_width="wrap_content"
+            android:id="@+id/position_view"
+            android:layout_width="@dimen/server_priority_rank_width"
             android:layout_height="wrap_content"
-            android:layout_alignParentStart="true"
-            android:layout_centerVertical="true"
-            android:layout_toStartOf="@id/priority_view"
+            android:gravity="start"
+            android:text="@{position}"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+            android:textColor="?attr/colorPrimary" />
+
+        <TextView
+            android:id="@+id/name_view"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
             android:text="@{serverName}"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Body1" />
 
-        <TextView
-            android:id="@+id/priority_view"
+        <!--
+            Same two glyphs, same order (YouTube then Gemini) and the same
+            drawing code as the proxy list, so a server reads identically
+            on both screens. A badge is GONE when the sweep has no verdict.
+        -->
+        <com.github.kr328.clash.design.view.FleetBadgeView
+            android:id="@+id/youtube_badge"
+            android:layout_width="@dimen/server_priority_badge_size"
+            android:layout_height="@dimen/server_priority_badge_size"
+            android:layout_marginStart="@dimen/item_tailing_margin"
+            app:badgeKind="youtube" />
+
+        <com.github.kr328.clash.design.view.FleetBadgeView
+            android:id="@+id/gemini_badge"
+            android:layout_width="@dimen/server_priority_badge_size"
+            android:layout_height="@dimen/server_priority_badge_size"
+            android:layout_marginStart="@dimen/item_tailing_margin"
+            app:badgeKind="gemini" />
+
+        <ImageView
+            android:id="@+id/drag_handle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_alignParentEnd="true"
-            android:layout_centerVertical="true"
-            android:text="@{priorityText}"
-            android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
-            android:textColor="?attr/colorPrimary" />
-    </RelativeLayout>
+            android:layout_marginStart="@dimen/item_tailing_margin"
+            android:contentDescription="@string/server_priority_drag_hint"
+            android:src="@drawable/ic_baseline_drag_handle" />
+    </LinearLayout>
 </layout>

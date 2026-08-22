@@ -84,4 +84,10 @@
     <!-- Logcat Design -->
     <dimen name="logcat_padding_vertical">12dp</dimen>
     <dimen name="logcat_padding_horizontal">12dp</dimen>
+    <!-- Server-priorities row: the rank column is wide enough for a
+         two-digit position, the badge box matches the proxy list's
+         badge size at default text scale. -->
+    <dimen name="server_priority_rank_width">32dp</dimen>
+    <dimen name="server_priority_badge_size">18dp</dimen>
+
 </resources>

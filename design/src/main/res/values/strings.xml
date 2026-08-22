@@ -371,7 +371,8 @@
     <string name="shortcut_stop_short">Stop Clash</string>
     <string name="shortcut_stop_long">Stop Clash service</string>
     <string name="server_priorities">Server priorities</string>
-    <string name="server_priority_input_hint">Lower number — higher priority. Empty — no priority.</string>
+    <string name="server_priority_drag_hint">Hold a server and drag it to reorder</string>
+    <string name="server_priorities_reset">Reset to subscription order</string>
     <string name="server_priorities_empty">No servers known yet. Import or update a profile first.</string>
     <string name="server_priorities_save_failed">Could not save priorities. Check storage and try again.</string>
     <string name="fleet_sort">Fleet status</string>
