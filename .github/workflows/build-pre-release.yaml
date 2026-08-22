@@ -1,9 +1,25 @@
 name: Build Pre-Release
 on:
+  # Upstream also runs this on every push to main. This fork does not:
+  #
+  # 1. It cannot succeed here. The job signs with a release keystore fed
+  #    from repo secrets, and this fork deliberately has none -- the
+  #    personal signing key never leaves the developer's machine, because
+  #    this fork is public and a CI-reachable key would let anyone forge
+  #    "updates" to the app. See scripts/resign-fork-apk.sh in the outer
+  #    vpn-leak-testing repo; CI APKs are re-signed locally instead.
+  #    (The job also `cat`s signing.properties into the log, which is a
+  #    second reason not to hand it a real key.)
+  # 2. We would not want it to succeed. It moves the Prerelease-alpha tag
+  #    and publishes a GitHub Release on a research fork.
+  #
+  # It failed on all three pushes to main between 2026-04 and 2026-08,
+  # burning ~10 min of CI each time before dying at packageAlphaRelease.
+  # Build Debug still runs on main and is the signal we actually use.
+  #
+  # workflow_dispatch is kept so the job can be run deliberately if this
+  # fork ever gets its own signing secrets; it will fail until then.
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
 jobs:
   BuildPreRelease:
@@ -92,14 +108,14 @@ jobs:
           delete_release: true
 
       - name: Tag Repo
-        uses: richardsimko/update-tag@v1
+        uses: richardsimko/update-tag@v3
         with:
           tag_name: Prerelease-alpha
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Alpha
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         if: ${{  success() }}
         with:
           tag_name: Prerelease-alpha
@@ -108,4 +124,4 @@ jobs:
           generate_release_notes: true
 
       - name: Release Changelog Builder
-        uses: mikepenz/release-changelog-builder-action@v4
+        uses: mikepenz/release-changelog-builder-action@v6

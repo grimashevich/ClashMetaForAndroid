@@ -1,4 +1,18 @@
+# The core is our own mihomo fork, not MetaCubeX's, because the geo-split
+# proxy group and the fleet-status region hook live there.
+#
+# `branch = cmfa-main` is deliberately a *stable* name rather than
+# whichever feature branch happened to produce the current revision. The
+# invariant: cmfa-main always contains the SHA recorded here, so
+# `git submodule update --remote` can never silently move the core to a
+# revision that predates the app's expectations. Advance cmfa-main in the
+# core fork in the same change that re-pins the SHA here.
+#
+# (This replaces a per-feature `branch =` value, which went stale: it
+# still named feat/custom-balancers after the pin had moved onto
+# feat/fleet-status.)
+
 [submodule "clash-foss"]
 	path = core/src/foss/golang/clash
 	url = https://github.com/grimashevich/mihomo
-	branch = feat/fleet-status
+	branch = cmfa-main
